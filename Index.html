@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Game of Life — iPad</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --fg: #eaecf1;
+      --muted: #9aa3b2;
+      --accent: #7c5cff;
+      --accent-2: #2ee6a6;
+      --glass: rgba(255,255,255,0.06);
+      --glass-strong: rgba(255,255,255,0.12);
+      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+      --radius: 18px;
+    }
+    html, body {
+      margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; overscroll-behavior: none;
+    }
+    #app { position: fixed; inset: 0; display: grid; grid-template-rows: 1fr auto; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    /* Control bar */
+    .bar {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+      display: grid; grid-auto-flow: column; gap: 10px; align-items: center;
+      background: var(--glass); backdrop-filter: blur(16px) saturate(120%);
+      border: 1px solid var(--glass-strong); border-radius: var(--radius);
+      padding: 10px 12px; box-shadow: var(--shadow);
+    }
+    .btn {
+      display: inline-grid; place-items: center; min-width: 44px; height: 44px; padding: 0 14px; border-radius: 14px; border: 1px solid transparent;
+      background: rgba(255,255,255,0.06); color: var(--fg); font-weight: 600; letter-spacing: 0.2px;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn.toggle[aria-pressed="true"] { background: var(--accent); color: white; }
+    .btn.secondary { background: rgba(255,255,255,0.04); color: var(--muted); }
+
+    .seg { display: grid; grid-auto-flow: column; gap: 6px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); }
+    .seg .btn { height: 36px; min-width: 36px; padding: 0 10px; border-radius: 10px; font-size: 14px; }
+
+    .slider {
+      -webkit-appearance: none; appearance: none; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.12); outline: none; width: 160px;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-2); border: 2px solid rgba(0,0,0,0.25);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    }
+
+    .badge { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; margin-left: 8px; }
+    .hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; letter-spacing: 0.4px; opacity: 0.75; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="life"></canvas>
+  </div>
+
+  <div class="hint">Tip: two-finger drag to pan, pinch to zoom. Tap to toggle cells. “Live Paint” lets you draw life while running.</div>
+
+  <div class="bar" role="toolbar" aria-label="Controls">
+    <button id="run" class="btn toggle" aria-pressed="false" title="Run / Pause">Run</button>
+    <button id="step" class="btn secondary" title="Step one generation">Step</button>
+
+    <div class="seg" aria-label="Drawing Mode">
+      <button id="paintToggle" class="btn toggle" aria-pressed="false" title="Live Paint (draw while running)">Live Paint</button>
+      <button id="eraseToggle" class="btn toggle" aria-pressed="false" title="Erase mode">Erase</button>
+    </div>
+
+    <div class="seg" aria-label="Presets">
+      <button id="random" class="btn" title="Randomize">Random</button>
+      <button id="clear" class="btn" title="Clear">Clear</button>
+    </div>
+
+    <div class="seg" aria-label="Speed">
+      <input id="speed" class="slider" type="range" min="2" max="60" value="30" />
+      <span class="badge" id="fpsLabel">30 fps</span>
+    </div>
+
+    <div class="seg" aria-label="Cell Size">
+      <input id="cellSize" class="slider" type="range" min="4" max="24" value="10" />
+      <span class="badge" id="cellLabel">10 px</span>
+    </div>
+  </div>
+
+  <script>
+    // --- Display / Canvas setup ---
+    const canvas = document.getElementById('life');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const DPR = Math.max(1, window.devicePixelRatio || 1);
+
+    let view = { x: 0, y: 0, k: 1 }; // pan/zoom
+
+    function resize() {
+      const w = window.innerWidth; const h = window.innerHeight;
+      canvas.width = Math.floor(w * DPR); canvas.height = Math.floor(h * DPR);
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+      draw();
+    }
+    window.addEventListener('resize', resize, { passive: true });
+
+    // --- Simulation ---
+    let cellPx = 10; // logical pixels per cell (before DPR & zoom)
+    let cols = 0, rows = 0, size = 0;
+    let grid = new Uint8Array(0);
+    let next = new Uint8Array(0);
+
+    function alloc() {
+      cols = Math.max(8, Math.floor((canvas.width / DPR) / (cellPx * view.k)));
+      rows = Math.max(8, Math.floor((canvas.height / DPR) / (cellPx * view.k)));
+      size = cols * rows;
+      grid = new Uint8Array(size);
+      next = new Uint8Array(size);
+    }
+
+    function idx(x, y) { return ((y + rows) % rows) * cols + ((x + cols) % cols); } // toroidal wrap
+
+    function randomize(density = 0.18) {
+      for (let i = 0; i < size; i++) grid[i] = Math.random() < density ? 1 : 0;
+      draw();
+    }
+
+    function clearAll() { grid.fill(0); draw(); }
+
+    function step() {
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const i = y * cols + x;
+          let n = 0;
+          // sum neighbors (unrolled for speed)
+          n += grid[idx(x-1,y-1)]; n += grid[idx(x,y-1)]; n += grid[idx(x+1,y-1)];
+          n += grid[idx(x-1,y  )];                        n += grid[idx(x+1,y  )];
+          n += grid[idx(x-1,y+1)]; n += grid[idx(x,y+1)]; n += grid[idx(x+1,y+1)];
+          const g = grid[i];
+          next[i] = (g ? (n === 2 || n === 3) : (n === 3)) ? 1 : 0;
+        }
+      }
+      // swap
+      const tmp = grid; grid = next; next = tmp;
+    }
+
+    // --- Rendering ---
+    function draw() {
+      ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const scale = cellPx * view.k * DPR;
+      const ox = Math.floor(view.x * DPR), oy = Math.floor(view.y * DPR);
+
+      // grid lines (subtle)
+      const stepPx = scale;
+      if (stepPx >= 8) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const W = canvas.width, H = canvas.height;
+        for (let x = ox % stepPx; x < W; x += stepPx) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+        for (let y = oy % stepPx; y < H; y += stepPx) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+        ctx.stroke();
+      }
+
+      // live cells
+      ctx.fillStyle = '#cfd6ff';
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (!grid[y*cols + x]) continue;
+          const px = Math.floor(x * scale + ox);
+          const py = Math.floor(y * scale + oy);
+          ctx.fillRect(px + 1, py + 1, Math.floor(scale) - 2, Math.floor(scale) - 2);
+        }
+      }
+    }
+
+    // --- Interaction (touch-first) ---
+    let running = false;
+    let livePaint = false;
+    let eraseMode = false;
+
+    const runBtn = document.getElementById('run');
+    const stepBtn = document.getElementById('step');
+    const paintBtn = document.getElementById('paintToggle');
+    const eraseBtn = document.getElementById('eraseToggle');
+    const randomBtn = document.getElementById('random');
+    const clearBtn  = document.getElementById('clear');
+    const speedSlider = document.getElementById('speed');
+    const fpsLabel = document.getElementById('fpsLabel');
+    const cellSlider = document.getElementById('cellSize');
+    const cellLabel = document.getElementById('cellLabel');
+
+    function setPressed(el, on) { el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+
+    runBtn.addEventListener('click', async () => {
+      running = !running; setPressed(runBtn, running); runBtn.textContent = running ? 'Pause' : 'Run';
+      if (running) requestFullIfApple();
+    });
+
+    stepBtn.addEventListener('click', () => { if (!running) { step(); draw(); } });
+
+    paintBtn.addEventListener('click', () => { livePaint = !livePaint; setPressed(paintBtn, livePaint); if (livePaint) { eraseMode = false; setPressed(eraseBtn, false); } });
+    eraseBtn.addEventListener('click', () => { eraseMode = !eraseMode; setPressed(eraseBtn, eraseMode); if (eraseMode) { livePaint = false; setPressed(paintBtn, false); } });
+
+    randomBtn.addEventListener('click', () => randomize());
+    clearBtn.addEventListener('click', () => clearAll());
+
+    speedSlider.addEventListener('input', () => { fps = Number(speedSlider.value); fpsLabel.textContent = `${fps} fps`; });
+    cellSlider.addEventListener('input', () => {
+      cellPx = Number(cellSlider.value); cellLabel.textContent = `${cellPx} px`; alloc(); draw();
+    });
+
+    // Tap to toggle (or paint) cells. Two-finger pan, pinch to zoom.
+    let touching = false, lastPaintCell = -1;
+    let lastTouches = [];
+
+    function screenToCell(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left) / (cellPx * view.k);
+      const y = (clientY - rect.top)  / (cellPx * view.k);
+      const cx = Math.floor((x - view.x));
+      const cy = Math.floor((y - view.y));
+      return { cx, cy };
+    }
+
+    function paintAt(clientX, clientY) {
+      const { cx, cy } = screenToCell(clientX, clientY);
+      if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) return;
+      const i = idx(cx, cy);
+      if (i === lastPaintCell) return;
+      lastPaintCell = i;
+      grid[i] = eraseMode ? 0 : 1; // immediate materialization
+      draw(); // reflect instantly
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      lastPaintCell = -1; touching = true; canvas.setPointerCapture(e.pointerId);
+      if (e.isPrimary && e.buttons === 1 && (livePaint || !running)) {
+        paintAt(e.clientX, e.clientY);
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!touching) return;
+      // Panning with two fingers handled via touch events, but allow mouse/pen drag paint
+      if (e.isPrimary && e.buttons === 1 && (livePaint || !running)) {
+        paintAt(e.clientX, e.clientY);
+      }
+    });
+
+    canvas.addEventListener('pointerup', (e) => { touching = false; lastPaintCell = -1; canvas.releasePointerCapture(e.pointerId); });
+
+    // Touch gestures for pan/zoom
+    canvas.addEventListener('touchstart', (e) => { lastTouches = [...e.touches].map(t => ({ id: t.identifier, x: t.clientX, y: t.clientY })); }, { passive: true });
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2) {
+        const [a,b] = e.touches;
+        const [la, lb] = lastTouches;
+        if (!la || !lb) { lastTouches = [...e.touches].map(t => ({ id: t.identifier, x: t.clientX, y: t.clientY })); return; }
+        const cx = (a.clientX + b.clientX) * 0.5; const cy = (a.clientY + b.clientY) * 0.5;
+        const lcx = (la.x + lb.x) * 0.5; const lcy = (la.y + lb.y) * 0.5;
+        const d  = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        const ld = Math.hypot(la.x - lb.x, la.y - lb.y);
+        const k = Math.max(0.5, Math.min(6, view.k * (d/ld)));
+        // Keep the focal point stable
+        const { cx: gx, cy: gy } = screenToCell(cx, cy);
+        view.k = k;
+        const { cx: gx2, cy: gy2 } = screenToCell(cx, cy);
+        view.x += (gx - gx2); view.y += (gy - gy2);
+        // pan from center movement
+        view.x -= (cx - lcx) / (cellPx * view.k);
+        view.y -= (cy - lcy) / (cellPx * view.k);
+        draw();
+      } else if (e.touches.length === 1 && (livePaint || !running)) {
+        const t = e.touches[0]; paintAt(t.clientX, t.clientY);
+      }
+      lastTouches = [...e.touches].map(t => ({ id: t.identifier, x: t.clientX, y: t.clientY }));
+    }, { passive: false });
+
+    // --- Timing / Animation ---
+    let fps = 30; // target frames per second
+    let acc = 0;  // accumulator in seconds
+    let last = performance.now();
+
+    function frame(ts) {
+      const dt = (ts - last) / 1000; last = ts; acc += dt;
+      const stepTime = 1 / fps;
+      if (running) {
+        while (acc >= stepTime) { step(); acc -= stepTime; }
+        draw();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // --- iOS Fullscreen helper (works when added to Home Screen or on first gesture) ---
+    function requestFullIfApple() {
+      const el = document.documentElement;
+      if (document.fullscreenElement) return;
+      const canFs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if (canFs) {
+        try { (el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen).call(el); } catch {}
+      }
+    }
+
+    // --- Boot ---
+    function boot() {
+      resize();
+      cellPx = Number(cellSlider.value); cellLabel.textContent = `${cellPx} px`;
+      fps = Number(speedSlider.value); fpsLabel.textContent = `${fps} fps`;
+      view = { x: 0, y: 0, k: 1 };
+      alloc();
+      randomize(0.14);
+      requestAnimationFrame(frame);
+    }
+
+    // Reallocate grid if zoom makes logical grid too small/large
+    let reAllocTimer = null;
+    function scheduleAlloc() { clearTimeout(reAllocTimer); reAllocTimer = setTimeout(() => { const prev = grid; alloc(); // keep nothing (simpler)
+      draw(); }, 150);
+    }
+    window.addEventListener('resize', scheduleAlloc);
+
+    boot();
+  </script>
+</body>
+</html>
