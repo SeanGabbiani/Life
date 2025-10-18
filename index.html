@@ -12,7 +12,7 @@
   <style>
     :root{
       --bg:#0b0d12; --fg:#eaecf1; --muted:#9aa3b2;
-      --accent:#7c5cff; --accent2:#2ee6a6;
+      --accent:#7c5cff; --accent-2:#2ee6a6;
       --glass:rgba(255,255,255,.06); --glass-strong:rgba(255,255,255,.12);
       --shadow:0 10px 30px rgba(0,0,0,.35); --radius:18px;
     }
@@ -47,7 +47,7 @@
     .slider{ -webkit-appearance:none; appearance:none; height:8px; border-radius:999px;
       background:rgba(255,255,255,.12); outline:none; width:160px; flex:0 0 auto;}
     .slider::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:22px; height:22px; border-radius:50%;
-      background:var(--accent2); border:2px solid rgba(0,0,0,.25); box-shadow:0 2px 6px rgba(0,0,0,.35); }
+      background:var(--accent-2); border:2px solid rgba(0,0,0,.25); box-shadow:0 2px 6px rgba(0,0,0,.35); }
     .badge{ font-variant-numeric: tabular-nums; color:var(--muted); font-size:12px; margin-left:6px}
 
     /* left stamps toolbar */
@@ -76,20 +76,20 @@
   <!-- left “stamp” toolbar -->
   <div id="stamps" aria-label="Pattern stamps">
     <button class="stamp" data-pattern="glider"  title="Glider">🡲</button>
-    <button class="stamp" data-pattern="lwss"    title="Lightweight spaceship">🚀</button>
+    <button class="stamp" data-pattern="lwss"    title="LWSS">🚀</button>
     <button class="stamp" data-pattern="blinker" title="Blinker">│</button>
     <button class="stamp" data-pattern="pulsar"  title="Pulsar">✸</button>
     <button class="stamp" data-pattern="clear"   title="Stamp off">⏹</button>
   </div>
 
-  <!-- bottom icon-only controls -->
+  <!-- bottom icon-only controls (FULL original feature set) -->
   <div class="bar" role="toolbar" aria-label="Controls">
     <button id="run"   class="btn toggle"   aria-pressed="false" title="Run / Pause">▶</button>
     <button id="step"  class="btn secondary" title="Step">⏩</button>
 
     <div class="seg" aria-label="Draw tools">
-      <button id="paint" class="btn toggle" aria-pressed="false" title="Live Paint">🎨</button>
-      <button id="erase" class="btn toggle" aria-pressed="false" title="Erase">␡</button>
+      <button id="paintToggle" class="btn toggle" aria-pressed="false" title="Live Paint">🎨</button>
+      <button id="eraseToggle" class="btn toggle" aria-pressed="false" title="Erase">␡</button>
     </div>
 
     <div class="seg" aria-label="Presets">
@@ -101,80 +101,131 @@
       <input id="speed" class="slider" type="range" min="2" max="60" value="30" />
       <span class="badge" id="fpsLabel">30 fps</span>
     </div>
+
+    <div class="seg" aria-label="Cell Size">
+      <input id="cellSize" class="slider" type="range" min="4" max="24" value="10" />
+      <span class="badge" id="cellLabel">10 px</span>
+    </div>
   </div>
 
-  <div class="hint">Tip: two-finger drag to pan, pinch to zoom. Tap to toggle cells. Select a stamp on the left to “place” patterns.</div>
+  <div class="hint">Tip: two-finger drag to pan, pinch to zoom. Tap to toggle cells. Select a stamp on the left to “place” patterns. “Run” requests full-screen.</div>
 
   <script>
-    // ---------- Canvas & grid ----------
+    // ---------- Canvas & view ----------
     const canvas = document.getElementById('life');
     const ctx = canvas.getContext('2d', { alpha:false });
     const DPR = Math.max(1, window.devicePixelRatio || 1);
 
-    let size = 120;       // grid is size x size
-    let cellSize = 7;     // px per cell (logical before DPR)
-    canvas.width  = size * cellSize * DPR;
-    canvas.height = size * cellSize * DPR;
-    canvas.style.width  = size * cellSize + 'px';
-    canvas.style.height = size * cellSize + 'px';
-
-    let grid = new Uint8Array(size * size);
-
-    function draw(){
-      ctx.fillStyle = '#05070b';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
-
-      // subtle grid lines
-      if (cellSize * DPR >= 8){
-        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for(let x=0;x<=size;x++){
-          const px = Math.floor(x*cellSize*DPR)+.5;
-          ctx.moveTo(px,0); ctx.lineTo(px,canvas.height);
-        }
-        for(let y=0;y<=size;y++){
-          const py = Math.floor(y*cellSize*DPR)+.5;
-          ctx.moveTo(0,py); ctx.lineTo(canvas.width,py);
-        }
-        ctx.stroke();
-      }
-
-      // alive cells
-      ctx.fillStyle = '#cfd6ff';
-      for (let i=0;i<grid.length;i++){
-        if (!grid[i]) continue;
-        const x = (i % size), y = (i / size | 0);
-        const px = Math.floor(x*cellSize*DPR);
-        const py = Math.floor(y*cellSize*DPR);
-        const s  = Math.floor(cellSize*DPR)-1;
-        ctx.fillRect(px+1, py+1, s-1, s-1);
-      }
+    let view = { x:0, y:0, k:1 }; // world pan (in cells) & zoom
+    function resize(){
+      const w = window.innerWidth, h = window.innerHeight;
+      canvas.width  = Math.floor(w * DPR);
+      canvas.height = Math.floor(h * DPR);
+      canvas.style.width = w+'px';
+      canvas.style.height = h+'px';
+      alloc(); draw();
     }
+    window.addEventListener('resize', resize, { passive:true });
 
-    function idx(x,y){ return y*size + x }
+    // ---------- Grid (toroidal) ----------
+    let cellPx = 10;  // logical px per cell (before DPR*zoom)
+    let cols=0, rows=0, size=0;
+    let grid = new Uint8Array(0), next = new Uint8Array(0);
 
-    function randomize(d=0.18){
-      for (let i=0;i<grid.length;i++) grid[i] = Math.random()<d ? 1:0;
-      draw();
+    function alloc(){
+      cols = Math.max(8, Math.floor((canvas.width / DPR) / (cellPx * view.k)));
+      rows = Math.max(8, Math.floor((canvas.height/ DPR) / (cellPx * view.k)));
+      size = cols * rows;
+      grid = new Uint8Array(size);
+      next = new Uint8Array(size);
     }
+    function idx(x,y){ return ((y+rows)%rows)*cols + ((x+cols)%cols); }
+
+    function randomize(d=0.18){ for(let i=0;i<size;i++) grid[i] = Math.random()<d?1:0; draw(); }
     function clearAll(){ grid.fill(0); draw(); }
 
     function step(){
-      const next = grid.slice();
-      for (let i=0;i<grid.length;i++){
-        const x = i % size, y = (i/size|0);
-        let n = 0;
-        for (let dy=-1;dy<=1;dy++)
-          for (let dx=-1;dx<=1;dx++){
-            if (dx===0 && dy===0) continue;
-            const nx = x+dx, ny = y+dy;
-            if (nx>=0 && nx<size && ny>=0 && ny<size) n += grid[idx(nx,ny)];
-          }
-        next[i] = (n===3 || (grid[i] && n===2)) ? 1 : 0;
+      for(let y=0;y<rows;y++){
+        for(let x=0;x<cols;x++){
+          const i = y*cols + x;
+          let n=0;
+          n += grid[idx(x-1,y-1)] + grid[idx(x,y-1)] + grid[idx(x+1,y-1)];
+          n += grid[idx(x-1,y  )]                     + grid[idx(x+1,y  )];
+          n += grid[idx(x-1,y+1)] + grid[idx(x,y+1)] + grid[idx(x+1,y+1)];
+          const g = grid[i];
+          next[i] = (g ? (n===2||n===3) : (n===3)) ? 1 : 0;
+        }
       }
-      grid = next; draw();
+      const t=grid; grid=next; next=t;
     }
+
+    // ---------- Rendering ----------
+    function draw(){
+      ctx.fillStyle = '#05070b'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      const scale = cellPx * view.k * DPR;
+      const ox = Math.floor(view.x * DPR), oy = Math.floor(view.y * DPR);
+
+      // grid lines
+      if (scale >= 8){
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth=1; ctx.beginPath();
+        const W=canvas.width, H=canvas.height;
+        for(let x=ox%scale; x<W; x+=scale){ ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,H); }
+        for(let y=oy%scale; y<H; y+=scale){ ctx.moveTo(0,y+.5); ctx.lineTo(W,y+.5); }
+        ctx.stroke();
+      }
+
+      // cells
+      ctx.fillStyle = '#cfd6ff';
+      for(let y=0;y<rows;y++){
+        for(let x=0;x<cols;x++){
+          if(!grid[y*cols+x]) continue;
+          const px = Math.floor(x*scale + ox);
+          const py = Math.floor(y*scale + oy);
+          ctx.fillRect(px+1, py+1, Math.floor(scale)-2, Math.floor(scale)-2);
+        }
+      }
+    }
+
+    // ---------- Controls & state ----------
+    let running=false, livePaint=false, eraseMode=false;
+    const runBtn = document.getElementById('run');
+    const stepBtn = document.getElementById('step');
+    const paintBtn = document.getElementById('paintToggle');
+    const eraseBtn = document.getElementById('eraseToggle');
+    const randomBtn= document.getElementById('random');
+    const clearBtn = document.getElementById('clear');
+    const speed    = document.getElementById('speed');
+    const fpsLabel = document.getElementById('fpsLabel');
+    const cellSz   = document.getElementById('cellSize');
+    const cellLbl  = document.getElementById('cellLabel');
+
+    function setPressed(el,on){ el.setAttribute('aria-pressed', on?'true':'false'); }
+
+    runBtn.addEventListener('click', ()=>{
+      running = !running; setPressed(runBtn, running);
+      if (running){ requestFullIfApple(); }
+    });
+    stepBtn.addEventListener('click', ()=>{ if(!running){ step(); draw(); } });
+
+    paintBtn.addEventListener('click', ()=>{
+      livePaint = !livePaint; setPressed(paintBtn, livePaint);
+      if (livePaint){ eraseMode=false; setPressed(eraseBtn,false); }
+    });
+    eraseBtn.addEventListener('click', ()=>{
+      eraseMode = !eraseMode; setPressed(eraseBtn, eraseMode);
+      if (eraseMode){ livePaint=false; setPressed(paintBtn,false); }
+    });
+
+    randomBtn.addEventListener('click', ()=> randomize());
+    clearBtn .addEventListener('click', ()=> clearAll());
+
+    let fps = 30;
+    speed.addEventListener('input', ()=>{ fps = Number(speed.value); fpsLabel.textContent = `${fps} fps`; });
+
+    cellSz.addEventListener('input', ()=>{
+      cellPx = Number(cellSz.value); cellLbl.textContent = `${cellPx} px`;
+      alloc(); draw();
+    });
 
     // ---------- Stamps ----------
     const patterns = {
@@ -186,96 +237,128 @@
                 [-4,-6],[-4,-5],[-4,-2],[-4,-1],[-4, 0],[-4, 1],
                 [ 4,-6],[ 4,-5],[ 4,-2],[ 4,-1],[ 4, 0],[ 4, 1]],
     };
-
     let currentStamp = null;
+
     function setStamp(name){
-      const btns = document.querySelectorAll('#stamps .stamp');
+      const btns=[...document.querySelectorAll('#stamps .stamp')];
       btns.forEach(b=>b.setAttribute('aria-pressed','false'));
-      if (!name || name==='clear'){ currentStamp = null; return; }
+      if (!name || name==='clear'){ currentStamp=null; return; }
       currentStamp = patterns[name];
-      const b = [...btns].find(b=>b.dataset.pattern===name);
-      if (b) b.setAttribute('aria-pressed','true');
+      const b = btns.find(b=>b.dataset.pattern===name); if (b) b.setAttribute('aria-pressed','true');
     }
     document.querySelectorAll('#stamps .stamp').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const name = btn.dataset.pattern;
-        const isOn = btn.getAttribute('aria-pressed')==='true';
-        setStamp(isOn ? 'clear' : name);
+        const on = btn.getAttribute('aria-pressed')==='true';
+        setStamp(on ? 'clear' : name);
       });
     });
 
-    function stampAt(x,y){
+    function stampAt(cx,cy){
       if (!currentStamp) return false;
       currentStamp.forEach(([dx,dy])=>{
-        const nx=x+dx, ny=y+dy;
-        if (nx>=0 && nx<size && ny>=0 && ny<size) grid[idx(nx,ny)] = 1;
+        const nx=cx+dx, ny=cy+dy;
+        if (nx>=0 && nx<cols && ny>=0 && ny<rows) grid[idx(nx,ny)] = 1;
       });
       return true;
     }
 
-    // ---------- Interaction ----------
-    let running=false, painting=false, erasing=false;
-    let fps = 30, loopId=null;
-    const fpsLabel = document.getElementById('fpsLabel');
-
-    function loop(){
-      step();
-      loopId = setTimeout(()=>requestAnimationFrame(loop), 1000/fps);
+    // ---------- Interaction: tap/paint, pan/zoom ----------
+    function screenToCell(clientX,clientY){
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left) / (cellPx * view.k);
+      const y = (clientY - rect.top ) / (cellPx * view.k);
+      return { cx: Math.floor((x - view.x)), cy: Math.floor((y - view.y)) };
     }
 
-    function toggleRun(){
-      running = !running;
-      document.getElementById('run').setAttribute('aria-pressed', running?'true':'false');
-      if (running){ loop(); } else { clearTimeout(loopId); loopId=null; }
+    let touching=false, lastPaintCell=-1, lastTouches=[];
+    function paintAt(clientX,clientY){
+      const {cx,cy} = screenToCell(clientX,clientY);
+      if (cx<0||cy<0||cx>=cols||cy>=rows) return;
+      const i = idx(cx,cy);
+      if (i===lastPaintCell) return;
+      lastPaintCell=i;
+      grid[i] = eraseMode ? 0 : 1; draw();
     }
 
-    document.getElementById('run').addEventListener('click', toggleRun);
-    document.getElementById('step').addEventListener('click', ()=>{ if(!running){ step(); } });
-
-    document.getElementById('paint').addEventListener('click', ()=>{
-      painting = !painting;
-      document.getElementById('paint').setAttribute('aria-pressed', painting?'true':'false');
-      if (painting){ erasing=false; document.getElementById('erase').setAttribute('aria-pressed','false'); }
+    canvas.addEventListener('pointerdown', e=>{
+      lastPaintCell=-1; touching=true; canvas.setPointerCapture(e.pointerId);
+      if (e.isPrimary && e.buttons===1){
+        const {cx,cy} = screenToCell(e.clientX,e.clientY);
+        // try stamp first
+        if (!stampAt(cx,cy)){
+          if (livePaint || !running) paintAt(e.clientX,e.clientY);
+        }
+      }
     });
-    document.getElementById('erase').addEventListener('click', ()=>{
-      erasing = !erasing;
-      document.getElementById('erase').setAttribute('aria-pressed', erasing?'true':'false');
-      if (erasing){ painting=false; document.getElementById('paint').setAttribute('aria-pressed','false'); }
+    canvas.addEventListener('pointermove', e=>{
+      if (!touching) return;
+      if (e.isPrimary && e.buttons===1 && (livePaint || !running)) paintAt(e.clientX,e.clientY);
     });
+    canvas.addEventListener('pointerup', e=>{ touching=false; lastPaintCell=-1; canvas.releasePointerCapture(e.pointerId); });
 
-    document.getElementById('random').addEventListener('click', ()=>randomize());
-    document.getElementById('clear').addEventListener('click', ()=>clearAll());
+    // touch pan/zoom
+    canvas.addEventListener('touchstart', e=>{
+      lastTouches = [...e.touches].map(t=>({id:t.identifier,x:t.clientX,y:t.clientY}));
+    }, { passive:true });
 
-    const speed = document.getElementById('speed');
-    speed.addEventListener('input', ()=>{
-      fps = Number(speed.value);
-      fpsLabel.textContent = `${fps} fps`;
-      if (running){ clearTimeout(loopId); loop(); }
-    });
+    canvas.addEventListener('touchmove', e=>{
+      if (e.touches.length===2){
+        const [a,b]=e.touches, [la,lb]=lastTouches;
+        if (!la||!lb){ lastTouches=[...e.touches].map(t=>({id:t.identifier,x:t.clientX,y:t.clientY})); return; }
+        const cx=(a.clientX+b.clientX)*.5, cy=(a.clientY+b.clientY)*.5;
+        const lcx=(la.x+lb.x)*.5, lcy=(la.y+lb.y)*.5;
+        const d = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+        const ld= Math.hypot(la.x-lb.x, la.y-lb.y);
+        const k = Math.max(.5, Math.min(6, view.k*(d/ld)));
+        const before = screenToCell(cx,cy);
+        view.k=k;
+        const after = screenToCell(cx,cy);
+        view.x += (before.cx-after.cx); view.y += (before.cy-after.cy);
+        view.x -= (cx-lcx)/(cellPx*view.k);
+        view.y -= (cy-lcy)/(cellPx*view.k);
+        draw();
+      } else if (e.touches.length===1 && (livePaint || !running)){
+        const t=e.touches[0]; paintAt(t.clientX,t.clientY);
+      }
+      lastTouches=[...e.touches].map(t=>({id:t.identifier,x:t.clientX,y:t.clientY}));
+    }, { passive:false });
 
-    canvas.addEventListener('click', (e)=>{
-      const r = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - r.left) / cellSize);
-      const y = Math.floor((e.clientY - r.top)  / cellSize);
+    // ---------- Timing & animation ----------
+    let acc=0, last=performance.now();
+    function frame(ts){
+      const dt=(ts-last)/1000; last=ts; acc+=dt;
+      const stepTime = 1/fps;
+      if (running){
+        while(acc>=stepTime){ step(); acc-=stepTime; }
+        draw();
+      }
+      requestAnimationFrame(frame);
+    }
 
-      // 1) stamp if selected
-      if (stampAt(x,y)){ draw(); return; }
+    function requestFullIfApple(){
+      const el=document.documentElement;
+      if (document.fullscreenElement) return;
+      const fn = el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+      if (fn) { try{ fn.call(el); }catch{} }
+    }
 
-      // 2) otherwise, live paint / erase / toggle
-      const i = idx(x,y);
-      if (erasing) grid[i] = 0;
-      else if (painting) grid[i] = 1;
-      else grid[i] = grid[i] ? 0 : 1;
-      draw();
-    });
-
-    // ---------- Service worker (for PWA install/offline) ----------
-    if ('serviceWorker' in navigator) {
+    // ---------- Service worker ----------
+    if ('serviceWorker' in navigator){
       window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
     }
 
     // ---------- Boot ----------
-    randomize(0.14);
+    function boot(){
+      resize();
+      cellPx = Number(cellSz.value); cellLbl.textContent = `${cellPx} px`;
+      fps = Number(speed.value);     fpsLabel.textContent= `${fps} fps`;
+      view = { x:0, y:0, k:1 };
+      alloc();
+      randomize(0.14);
+      requestAnimationFrame(frame);
+    }
+    boot();
   </script>
 </body>
 </html>
