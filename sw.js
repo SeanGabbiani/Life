@@ -1,4 +1,4 @@
-const CACHE = "life-pwa-v1";
+const CACHE = "life-pwa-v5";
 const ASSETS = [
   "./",
   "./index.html",
