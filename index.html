@@ -361,6 +361,13 @@ canvas.addEventListener('click', e=>{
 
 /* Boot */
 resize(); randomize(0.14);
+<script>
+  const APP_VERSION = "v2";
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js?v=' + APP_VERSION);
+    });
+  }
 </script>
 </body>
 </html>
