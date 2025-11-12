@@ -1,7 +1,7 @@
 {
   "name": "Game of Life — iPad",
   "short_name": "Life",
-  "start_url": "./",
+  "start_url": "./?pwa=1",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0b0d12",
