@@ -1,57 +1,29 @@
-// --- Game of Life PWA SW (cache-busted by CACHE name) ---
-const CACHE = "life-pwa-v2";
+// Extremely safe, transparent service worker for Life PWA.
+// No offline caching yet – just makes sure old broken caches are gone
+// and that we don't interfere with normal network loading.
 
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.webmanifest",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png"
-];
+const LIFE_CACHE_PREFIX = 'life-pwa';
 
-// Take over immediately on update
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+// Install: activate immediately
+self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+// Activate: delete any old Life-related caches, then take control
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key.startsWith(LIFE_CACHE_PREFIX))
+          .map((key) => caches.delete(key))
+      )
     ).then(() => self.clients.claim())
   );
 });
 
-// Cache-first for static assets, network-first for HTML navigations
-self.addEventListener("fetch", (e) => {
-  const req = e.request;
-
-  // Only handle GETs
-  if (req.method !== "GET") return;
-
-  const url = new URL(req.url);
-  const isHTML = req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
-
-  if (isHTML) {
-    // Network first, fall back to cache
-    e.respondWith(
-      fetch(req).then(r => {
-        const copy = r.clone();
-        caches.open(CACHE).then(c => c.put(req, copy));
-        return r;
-      }).catch(() => caches.match(req, { ignoreSearch: true }))
-    );
-  } else {
-    // Cache first for static assets
-    e.respondWith(
-      caches.match(req, { ignoreSearch: true }).then(hit =>
-        hit || fetch(req).then(r => {
-          const copy = r.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-          return r;
-        })
-      )
-    );
-  }
+// Fetch: just go straight to the network, no caching.
+// This makes the SW effectively "transparent" and very hard to break.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });
