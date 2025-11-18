@@ -5,7 +5,7 @@
   <title>Life – Conway’s Game of Life</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- PWA bits (keep these for your icon + “app” behaviour) -->
+  <!-- PWA bits (keep these if you already have manifest + icons) -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#000000" />
 
@@ -44,6 +44,8 @@
       height: 100%;
     }
 
+    /* Toolbar */
+
     #toolbar {
       background: var(--toolbar-bg);
       padding: 8px 10px;
@@ -64,6 +66,12 @@
       user-select: none;
       touch-action: manipulation;
       white-space: nowrap;
+    }
+
+    .btn.small {
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 10px;
     }
 
     .btn.active {
@@ -110,6 +118,8 @@
       border: none;
     }
 
+    /* Grid */
+
     #grid-container {
       flex: 1;
       position: relative;
@@ -124,6 +134,88 @@
       touch-action: none;
       background: var(--grid-dead);
     }
+
+    /* Bestiary overlay */
+
+    #bestiaryOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+
+    #bestiaryOverlay.open {
+      display: flex;
+    }
+
+    .bestiary-panel {
+      background: #111319;
+      border-radius: 16px;
+      padding: 16px;
+      width: min(460px, 90vw);
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+      overflow-y: auto;
+    }
+
+    .bestiary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .bestiary-title {
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .bestiary-note {
+      font-size: 12px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
+
+    .pattern-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* Tiny corner UI toggle */
+
+    .corner-toggle {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      border: 1px solid #2a2e3a;
+      background: #1b1e27;
+      color: #cccccc;
+      font-size: 18px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+      cursor: pointer;
+      z-index: 30;
+    }
+
+    .corner-toggle:active {
+      transform: translateY(1px);
+    }
+
+    .corner-toggle:hover {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -134,6 +226,7 @@
       <button class="btn" id="randomBtn">Random</button>
       <button class="btn" id="clearBtn">Clear</button>
       <button class="btn" id="bestiaryBtn">Bestiary</button>
+      <button class="btn" id="runBtn">Run</button>
 
       <div class="spacer"></div>
 
@@ -150,23 +243,185 @@
 
     <div id="grid-container">
       <canvas id="grid"></canvas>
+
+      <!-- Bestiary overlay -->
+      <div id="bestiaryOverlay">
+        <div class="bestiary-panel">
+          <div class="bestiary-header">
+            <span class="bestiary-title">Bestiary</span>
+            <button class="btn small" id="closeBestiaryBtn">Close</button>
+          </div>
+
+          <p class="bestiary-note">Gliders</p>
+          <div class="pattern-grid">
+            <button class="btn small pattern-btn" data-pattern="gliderSE">Glider SE</button>
+            <button class="btn small pattern-btn" data-pattern="gliderSW">Glider SW</button>
+            <button class="btn small pattern-btn" data-pattern="gliderNE">Glider NE</button>
+            <button class="btn small pattern-btn" data-pattern="gliderNW">Glider NW</button>
+          </div>
+
+          <p class="bestiary-note">Methuselahs</p>
+          <div class="pattern-grid">
+            <button class="btn small pattern-btn" data-pattern="methuselahRpentomino">R-pentomino</button>
+            <button class="btn small pattern-btn" data-pattern="methuselahAcorn">Acorn</button>
+            <button class="btn small pattern-btn" data-pattern="methuselahDiehard">Diehard</button>
+          </div>
+
+          <p class="bestiary-note">Spaceships</p>
+          <div class="pattern-grid">
+            <button class="btn small pattern-btn" data-pattern="spaceshipLWSS">LWSS</button>
+          </div>
+
+          <p class="bestiary-note">Guns & Engines</p>
+          <div class="pattern-grid">
+            <button class="btn small pattern-btn" data-pattern="gunGosper">Gosper gun</button>
+            <button class="btn small pattern-btn" data-pattern="pufferTrain1">Puffer train (stub)</button>
+            <button class="btn small pattern-btn" data-pattern="breeder1">Breeder (stub)</button>
+          </div>
+
+          <p class="bestiary-note">Machines</p>
+          <div class="pattern-grid">
+            <button class="btn small pattern-btn" data-pattern="tmArt">Turing machine (art stub)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tiny button to hide/show the toolbar -->
+      <button id="toggleUiBtn" class="corner-toggle" title="Toggle toolbar">
+        ⋮
+      </button>
     </div>
   </div>
 
   <script>
-    // Simple, self-contained Game of Life implementation
+    // -------- Patterns (coordinates relative to a small local origin) --------
+    // Each pattern is an array of [row, col] = [y, x], with non-negative ints.
+    // The stamp function will auto-center them on the grid.
+
+    const PATTERNS = {
+      // --- GLIDERS (4 orientations) ---
+      // Glider moving roughly down-right (SE)
+      gliderSE: [
+        [0, 1],
+        [1, 2],
+        [2, 0], [2, 1], [2, 2]
+      ],
+      // Down-left (SW)
+      gliderSW: [
+        [0, 1],
+        [1, 0],
+        [2, 0], [2, 1], [2, 2]
+      ],
+      // Up-right (NE)
+      gliderNE: [
+        [0, 0], [0, 1], [0, 2],
+        [1, 0],
+        [2, 1]
+      ],
+      // Up-left (NW)
+      gliderNW: [
+        [0, 0], [0, 1], [0, 2],
+        [1, 2],
+        [2, 1]
+      ],
+
+      // --- Methuselahs ---
+      // R-pentomino
+      // . O O
+      // O O .
+      // . O .
+      methuselahRpentomino: [
+        [0, 1], [0, 2],
+        [1, 0], [1, 1],
+        [2, 1]
+      ],
+
+      // Acorn
+      // . O . . . . .
+      // . . . O . . .
+      // O O . . O O O
+      methuselahAcorn: [
+        [0, 1],
+        [1, 3],
+        [2, 0], [2, 1],
+        [2, 4], [2, 5], [2, 6]
+      ],
+
+      // Diehard
+      // . . . . . . O .
+      // O O . . . . . .
+      // . . . . . O . .
+      // . . . . . . O O
+      methuselahDiehard: [
+        [0, 6],
+        [1, 0], [1, 1],
+        [2, 5],
+        [3, 6], [3, 7]
+      ],
+
+      // --- Spaceship: LWSS ---
+      // A standard lightweight spaceship (one common phase)
+      spaceshipLWSS: [
+        [0, 1], [0, 4],
+        [1, 0],
+        [2, 0], [2, 4],
+        [3, 1], [3, 2], [3, 3], [3, 4]
+      ],
+
+      // --- Gosper Glider Gun ---
+      // Coordinates adapted from a known implementation (36 live cells)
+      gunGosper: [
+        [5, 1], [5, 2], [6, 1], [6, 2],
+        [5, 11], [6, 11], [7, 11],
+        [4, 12],
+        [3, 13], [3, 14],
+        [8, 12],
+        [9, 13], [9, 14],
+        [6, 15],
+        [4, 16], [5, 17], [6, 17], [7, 17],
+        [6, 18],
+        [8, 16],
+        [3, 21], [4, 21], [5, 21],
+        [3, 22], [4, 22], [5, 22],
+        [2, 23], [6, 23],
+        [1, 25], [2, 25], [6, 25], [7, 25],
+        [3, 35], [4, 35],
+        [3, 36], [4, 36]
+      ],
+
+      // --- Stubs (to be filled later with real coordinates) ---
+      // You can fill these with real puffer / breeder / TM patterns when ready.
+      pufferTrain1: [
+        // TODO: real puffer train coordinates
+      ],
+      breeder1: [
+        // TODO: real breeder coordinates
+      ],
+      tmArt: [
+        // TODO: aesthetic / real Turing machine pattern
+      ]
+    };
+
+    // -------- Core Game of Life logic --------
 
     const canvas = document.getElementById("grid");
     const ctx = canvas.getContext("2d");
 
+    const toolbar = document.getElementById("toolbar");
     const paintBtn = document.getElementById("paintBtn");
     const eraseBtn = document.getElementById("eraseBtn");
     const randomBtn = document.getElementById("randomBtn");
     const clearBtn = document.getElementById("clearBtn");
     const bestiaryBtn = document.getElementById("bestiaryBtn");
+    const runBtn = document.getElementById("runBtn");
+    const toggleUiBtn = document.getElementById("toggleUiBtn");
 
     const speedSlider = document.getElementById("speedSlider");
     const cellSlider = document.getElementById("cellSlider");
+
+    const bestiaryOverlay = document.getElementById("bestiaryOverlay");
+    const closeBestiaryBtn = document.getElementById("closeBestiaryBtn");
+    const patternButtons = document.querySelectorAll(".pattern-btn");
 
     let cellSize = parseInt(cellSlider.value, 10);
     let rows = 0;
@@ -174,23 +429,9 @@
     let grid = [];
     let running = false;
     let frameId = null;
-    let paintMode = "paint"; // or "erase"
+    let paintMode = "paint"; // "paint" or "erase"
     let pointerDown = false;
-
-    function resizeGrid() {
-      const container = document.getElementById("grid-container");
-      const w = container.clientWidth || window.innerWidth;
-      const h = container.clientHeight || (window.innerHeight - 70);
-
-      canvas.width = w;
-      canvas.height = h;
-
-      cols = Math.floor(w / cellSize);
-      rows = Math.floor(h / cellSize);
-
-      grid = createEmptyGrid(rows, cols);
-      drawGrid();
-    }
+    let toolbarHidden = false;
 
     function createEmptyGrid(r, c) {
       const g = [];
@@ -201,13 +442,32 @@
       return g;
     }
 
+    function resizeGrid() {
+      const container = document.getElementById("grid-container");
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || (window.innerHeight - (toolbarHidden ? 0 : 70));
+
+      canvas.width = w;
+      canvas.height = h;
+
+      cols = Math.floor(w / cellSize);
+      rows = Math.floor(h / cellSize);
+
+      // If you want to preserve the old grid, you could copy into a new size.
+      // For now, reset to empty whenever we change size.
+      grid = createEmptyGrid(rows, cols);
+      drawGrid();
+    }
+
     function drawGrid() {
-      ctx.fillStyle = getComputedStyle(document.documentElement)
-        .getPropertyValue("--grid-dead") || "#050608";
+      ctx.fillStyle =
+        getComputedStyle(document.documentElement).getPropertyValue("--grid-dead") ||
+        "#050608";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const aliveColor = getComputedStyle(document.documentElement)
-        .getPropertyValue("--grid-alive") || "#27e8a7";
+      const aliveColor =
+        getComputedStyle(document.documentElement).getPropertyValue("--grid-alive") ||
+        "#27e8a7";
 
       ctx.fillStyle = aliveColor;
       for (let y = 0; y < rows; y++) {
@@ -266,11 +526,13 @@
     function start() {
       if (running) return;
       running = true;
+      runBtn.textContent = "Pause";
       loop();
     }
 
     function stop() {
       running = false;
+      runBtn.textContent = "Run";
       if (frameId) {
         clearTimeout(frameId);
         frameId = null;
@@ -314,7 +576,45 @@
       drawGrid();
     }
 
-    // Pointer events
+    // -------- Stamping beasts from Bestiary --------
+
+    function stampPattern(name, centerRow, centerCol) {
+      const pattern = PATTERNS[name];
+      if (!pattern || pattern.length === 0) {
+        // For stub patterns, just do nothing for now.
+        return;
+      }
+
+      // Compute pattern bounding box to auto-center it
+      let minY = Infinity, maxY = -Infinity;
+      let minX = Infinity, maxX = -Infinity;
+      pattern.forEach(([py, px]) => {
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+      });
+
+      const patRows = maxY - minY + 1;
+      const patCols = maxX - minX + 1;
+
+      const top = centerRow - Math.floor(patRows / 2);
+      const left = centerCol - Math.floor(patCols / 2);
+
+      pattern.forEach(([py, px]) => {
+        const y = top + (py - minY);
+        const x = left + (px - minX);
+        if (y >= 0 && y < rows && x >= 0 && x < cols) {
+          grid[y][x] = 1;
+        }
+      });
+
+      drawGrid();
+    }
+
+    // -------- Event wiring --------
+
+    // Pointer events for painting
     canvas.addEventListener("pointerdown", (evt) => {
       pointerDown = true;
       applyPaint(evt);
@@ -333,21 +633,38 @@
       pointerDown = false;
     });
 
-    // Toolbar
+    // Toolbar buttons
     paintBtn.addEventListener("click", () => togglePaintMode("paint"));
     eraseBtn.addEventListener("click", () => togglePaintMode("erase"));
     randomBtn.addEventListener("click", () => randomFill());
     clearBtn.addEventListener("click", () => clearGrid());
 
-    // For now Bestiary just pauses / resumes
-    bestiaryBtn.addEventListener("click", () => {
+    runBtn.addEventListener("click", () => {
       if (running) {
         stop();
-        bestiaryBtn.textContent = "Run";
       } else {
         start();
-        bestiaryBtn.textContent = "Pause";
       }
+    });
+
+    // Bestiary open/close
+    bestiaryBtn.addEventListener("click", () => {
+      stop(); // pause while picking beasts
+      bestiaryOverlay.classList.add("open");
+    });
+
+    closeBestiaryBtn.addEventListener("click", () => {
+      bestiaryOverlay.classList.remove("open");
+    });
+
+    patternButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const name = btn.dataset.pattern;
+        const cy = Math.floor(rows / 2);
+        const cx = Math.floor(cols / 2);
+        stampPattern(name, cy, cx);
+        bestiaryOverlay.classList.remove("open");
+      });
     });
 
     // Cell size slider
@@ -356,7 +673,16 @@
       resizeGrid();
     });
 
+    // Window resize
     window.addEventListener("resize", () => {
+      resizeGrid();
+    });
+
+    // Toolbar hide / show (corner button)
+    toggleUiBtn.addEventListener("click", () => {
+      toolbarHidden = !toolbarHidden;
+      toolbar.style.display = toolbarHidden ? "none" : "flex";
+      toggleUiBtn.textContent = toolbarHidden ? "☰" : "⋮";
       resizeGrid();
     });
 
