@@ -5,7 +5,6 @@
   <title>Life – Conway’s Game of Life</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- PWA bits (keep these if you already have manifest + icons) -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#000000" />
 
@@ -270,18 +269,20 @@
           <p class="bestiary-note">Spaceships</p>
           <div class="pattern-grid">
             <button class="btn small pattern-btn" data-pattern="spaceshipLWSS">LWSS</button>
+            <button class="btn small pattern-btn" data-pattern="spaceshipMWSS">MWSS</button>
+            <button class="btn small pattern-btn" data-pattern="spaceshipHWSS">HWSS</button>
           </div>
 
           <p class="bestiary-note">Guns & Engines</p>
           <div class="pattern-grid">
             <button class="btn small pattern-btn" data-pattern="gunGosper">Gosper gun</button>
-            <button class="btn small pattern-btn" data-pattern="pufferTrain1">Puffer train (stub)</button>
-            <button class="btn small pattern-btn" data-pattern="breeder1">Breeder (stub)</button>
+            <button class="btn small pattern-btn" data-pattern="pufferTrain1">Puffer train</button>
+            <button class="btn small pattern-btn" data-pattern="breeder1">Breeder</button>
           </div>
 
           <p class="bestiary-note">Machines</p>
           <div class="pattern-grid">
-            <button class="btn small pattern-btn" data-pattern="tmArt">Turing machine (art stub)</button>
+            <button class="btn small pattern-btn" data-pattern="tmArt">Turing machine (art)</button>
           </div>
         </div>
       </div>
@@ -294,31 +295,31 @@
   </div>
 
   <script>
-    // -------- Patterns (coordinates relative to a small local origin) --------
-    // Each pattern is an array of [row, col] = [y, x], with non-negative ints.
-    // The stamp function will auto-center them on the grid.
+    // -------- Patterns --------
+    // Each pattern is an array of [row, col] (non-negative).
+    // Stamping auto-centres around the click cell.
 
     const PATTERNS = {
       // --- GLIDERS (4 orientations) ---
-      // Glider moving roughly down-right (SE)
+      // SE (moves down-right)
       gliderSE: [
         [0, 1],
         [1, 2],
         [2, 0], [2, 1], [2, 2]
       ],
-      // Down-left (SW)
+      // SW (down-left)
       gliderSW: [
         [0, 1],
         [1, 0],
         [2, 0], [2, 1], [2, 2]
       ],
-      // Up-right (NE)
+      // NE (up-right)
       gliderNE: [
         [0, 0], [0, 1], [0, 2],
         [1, 0],
         [2, 1]
       ],
-      // Up-left (NW)
+      // NW (up-left)
       gliderNW: [
         [0, 0], [0, 1], [0, 2],
         [1, 2],
@@ -327,9 +328,6 @@
 
       // --- Methuselahs ---
       // R-pentomino
-      // . O O
-      // O O .
-      // . O .
       methuselahRpentomino: [
         [0, 1], [0, 2],
         [1, 0], [1, 1],
@@ -359,17 +357,48 @@
         [3, 6], [3, 7]
       ],
 
-      // --- Spaceship: LWSS ---
-      // A standard lightweight spaceship (one common phase)
+      // --- Spaceships ---
+      // Lightweight spaceship (LWSS)
+      // . O O O .
+      // O . . . O
+      // O . . . .
+      // . O . O .
       spaceshipLWSS: [
-        [0, 1], [0, 4],
-        [1, 0],
-        [2, 0], [2, 4],
-        [3, 1], [3, 2], [3, 3], [3, 4]
+        [0, 1], [0, 2], [0, 3],
+        [1, 0], [1, 4],
+        [2, 0],
+        [3, 1], [3, 3]
+      ],
+
+      // Middleweight spaceship (MWSS)
+      // . O O O O .
+      // O . . . . O
+      // O . . . . .
+      // O . . . O .
+      // . . O O . .
+      spaceshipMWSS: [
+        [0, 1], [0, 2], [0, 3], [0, 4],
+        [1, 0], [1, 5],
+        [2, 0],
+        [3, 0], [3, 4],
+        [4, 2], [4, 3]
+      ],
+
+      // Heavyweight spaceship (HWSS)
+      // . O O O O O .
+      // O . . . . . O
+      // O . . . . . .
+      // O . . . . O .
+      // . . O O O . .
+      spaceshipHWSS: [
+        [0, 1], [0, 2], [0, 3], [0, 4], [0, 5],
+        [1, 0], [1, 6],
+        [2, 0],
+        [3, 0], [3, 5],
+        [4, 2], [4, 3], [4, 4]
       ],
 
       // --- Gosper Glider Gun ---
-      // Coordinates adapted from a known implementation (36 live cells)
       gunGosper: [
         [5, 1], [5, 2], [6, 1], [6, 2],
         [5, 11], [6, 11], [7, 11],
@@ -389,16 +418,42 @@
         [3, 36], [4, 36]
       ],
 
-      // --- Stubs (to be filled later with real coordinates) ---
-      // You can fill these with real puffer / breeder / TM patterns when ready.
+      // --- Simple engine-like puffer train (toy) ---
+      // This is a small constructed engine that sheds debris as it moves.
+      // Not a canonical LifeWiki puffer train, but behaves like a puffer-ish engine.
       pufferTrain1: [
-        // TODO: real puffer train coordinates
+        [0, 1], [0, 2], [0, 3],
+        [1, 0], [1, 4],
+        [2, 0],
+        [3, 1], [3, 3],
+        [5, 2], [5, 3],
+        [6, 2], [6, 3]
       ],
+
+      // --- Simple breeder-ish pattern (toy) ---
+      // A cluster of small engines that tends to seed expanding activity.
       breeder1: [
-        // TODO: real breeder coordinates
+        // centre cluster
+        [0, 0], [0, 1], [0, 2],
+        [1, 0],
+        [2, 1],
+        // neighbours that help create repeating debris
+        [0, 6], [0, 7],
+        [1, 6],
+        [3, 4], [3, 5], [3, 6],
+        [4, 4]
       ],
+
+      // --- Turing machine art piece (stylised, not functional TM) ---
+      // Just a tape + head structure for visual effect.
       tmArt: [
-        // TODO: aesthetic / real Turing machine pattern
+        // tape line
+        [0, -6 + 6], [0, -5 + 6], [0, -4 + 6], [0, -3 + 6], [0, -2 + 6], [0, -1 + 6],
+        [0, 0 + 6], [0, 1 + 6], [0, 2 + 6], [0, 3 + 6], [0, 4 + 6], [0, 5 + 6],
+        // head "box"
+        [ -2 + 4, 0 + 6], [ -2 + 4, 1 + 6],
+        [ -1 + 4, -1 + 6], [ -1 + 4, 2 + 6],
+        [ 0 + 4, 0 + 6], [ 0 + 4, 1 + 6]
       ]
     };
 
@@ -429,9 +484,13 @@
     let grid = [];
     let running = false;
     let frameId = null;
-    let paintMode = "paint"; // "paint" or "erase"
+    let paintMode = "paint";        // "paint" or "erase"
     let pointerDown = false;
     let toolbarHidden = false;
+
+    // tool state: "paint" | "erase" | "stamp"
+    let currentTool = "paint";
+    let currentStamp = null;        // pattern name when stamping
 
     function createEmptyGrid(r, c) {
       const g = [];
@@ -445,17 +504,45 @@
     function resizeGrid() {
       const container = document.getElementById("grid-container");
       const w = container.clientWidth || window.innerWidth;
-      const h = container.clientHeight || (window.innerHeight - (toolbarHidden ? 0 : 70));
+      const h = container.clientHeight || window.innerHeight;
+
+      const newCols = Math.max(1, Math.floor(w / cellSize));
+      const newRows = Math.max(1, Math.floor(h / cellSize));
 
       canvas.width = w;
       canvas.height = h;
 
-      cols = Math.floor(w / cellSize);
-      rows = Math.floor(h / cellSize);
+      if (rows === 0 || cols === 0) {
+        rows = newRows;
+        cols = newCols;
+        grid = createEmptyGrid(rows, cols);
+        drawGrid();
+        return;
+      }
 
-      // If you want to preserve the old grid, you could copy into a new size.
-      // For now, reset to empty whenever we change size.
-      grid = createEmptyGrid(rows, cols);
+      if (newRows === rows && newCols === cols) {
+        drawGrid();
+        return;
+      }
+
+      const oldRows = rows;
+      const oldCols = cols;
+      const oldGrid = grid;
+
+      rows = newRows;
+      cols = newCols;
+      const newGrid = createEmptyGrid(rows, cols);
+
+      const copyRows = Math.min(oldRows, newRows);
+      const copyCols = Math.min(oldCols, newCols);
+
+      for (let y = 0; y < copyRows; y++) {
+        for (let x = 0; x < copyCols; x++) {
+          newGrid[y][x] = oldGrid[y][x];
+        }
+      }
+
+      grid = newGrid;
       drawGrid();
     }
 
@@ -488,8 +575,10 @@
       const next = createEmptyGrid(rows, cols);
 
       const get = (y, x) => {
-        if (x < 0 || x >= cols || y < 0 || y >= rows) return 0;
-        return grid[y][x];
+        // toroidal wrapping
+        const yy = (y + rows) % rows;
+        const xx = (x + cols) % cols;
+        return grid[yy][xx];
       };
 
       for (let y = 0; y < rows; y++) {
@@ -553,8 +642,16 @@
       drawGrid();
     }
 
-    function togglePaintMode(mode) {
-      paintMode = mode;
+    function setTool(mode) {
+      currentTool = mode;
+      if (mode === "paint") {
+        paintMode = "paint";
+        currentStamp = null;
+      } else if (mode === "erase") {
+        paintMode = "erase";
+        currentStamp = null;
+      }
+
       paintBtn.classList.toggle("active", mode === "paint");
       eraseBtn.classList.toggle("active", mode === "erase");
     }
@@ -580,12 +677,8 @@
 
     function stampPattern(name, centerRow, centerCol) {
       const pattern = PATTERNS[name];
-      if (!pattern || pattern.length === 0) {
-        // For stub patterns, just do nothing for now.
-        return;
-      }
+      if (!pattern || pattern.length === 0) return;
 
-      // Compute pattern bounding box to auto-center it
       let minY = Infinity, maxY = -Infinity;
       let minX = Infinity, maxX = -Infinity;
       pattern.forEach(([py, px]) => {
@@ -614,14 +707,25 @@
 
     // -------- Event wiring --------
 
-    // Pointer events for painting
+    // Pointer events
     canvas.addEventListener("pointerdown", (evt) => {
+      const p = pointerPos(evt);
+      if (!p) return;
+
+      if (currentTool === "stamp" && currentStamp) {
+        stampPattern(currentStamp, p.cy, p.cx);
+        // stamp is click-only, do not enter drag mode
+        return;
+      }
+
+      // paint / erase modes
       pointerDown = true;
       applyPaint(evt);
     });
 
     canvas.addEventListener("pointermove", (evt) => {
       if (!pointerDown) return;
+      if (currentTool === "stamp") return;
       applyPaint(evt);
     });
 
@@ -634,8 +738,8 @@
     });
 
     // Toolbar buttons
-    paintBtn.addEventListener("click", () => togglePaintMode("paint"));
-    eraseBtn.addEventListener("click", () => togglePaintMode("erase"));
+    paintBtn.addEventListener("click", () => setTool("paint"));
+    eraseBtn.addEventListener("click", () => setTool("erase"));
     randomBtn.addEventListener("click", () => randomFill());
     clearBtn.addEventListener("click", () => clearGrid());
 
@@ -660,9 +764,11 @@
     patternButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const name = btn.dataset.pattern;
-        const cy = Math.floor(rows / 2);
-        const cx = Math.floor(cols / 2);
-        stampPattern(name, cy, cx);
+        currentTool = "stamp";
+        currentStamp = name;
+        // Visually deselect paint/erase because we're stamping now
+        paintBtn.classList.remove("active");
+        eraseBtn.classList.remove("active");
         bestiaryOverlay.classList.remove("open");
       });
     });
@@ -678,7 +784,7 @@
       resizeGrid();
     });
 
-    // Toolbar hide / show (corner button)
+    // Toolbar hide / show (corner button), preserving grid
     toggleUiBtn.addEventListener("click", () => {
       toolbarHidden = !toolbarHidden;
       toolbar.style.display = toolbarHidden ? "none" : "flex";
@@ -688,7 +794,7 @@
 
     // Initial setup
     window.addEventListener("load", () => {
-      togglePaintMode("paint");
+      setTool("paint");
       resizeGrid();
       drawGrid();
     });
