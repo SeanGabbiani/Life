@@ -300,56 +300,81 @@
 <body>
   <div id="app">
     <div id="toolbar" class="toolbar">
-      <div class="toolbar-group">
-        <label>Simulation</label>
-        <button id="runBtn" class="primary">
-          <span class="icon">▶</span>
-          <span id="runLabel">Run</span>
-        </button>
-        <button id="stepBtn" title="Step one generation">
-          <span class="icon">⏭</span> Step
-        </button>
-        <span class="toolbar-small-label">Speed</span>
-        <input type="range" id="speedSlider" min="2" max="60" value="20" />
-      </div>
+  <!-- Play controls -->
+  <button id="runBtn" class="primary">
+    <span id="runLabel">Run</span>
+  </button>
 
-      <div class="toolbar-group">
-        <label>World</label>
-        <button id="randomBtn">
-          <span class="icon">✨</span> Random
-        </button>
-        <button id="clearBtn" class="danger">
-          <span class="icon">⨉</span> Clear
-        </button>
-      </div>
+  <button id="randomBtn">
+    Random
+  </button>
 
-      <div class="toolbar-group">
-        <label>Tool</label>
-        <button data-tool="paint" class="toolBtn active">
-          <span class="icon">●</span> Paint
-        </button>
-        <button data-tool="erase" class="toolBtn">
-          <span class="icon">○</span> Erase
-        </button>
-        <button data-tool="stamp" class="toolBtn">
-          <span class="icon">⛯</span> Stamp
-        </button>
-      </div>
+  <button id="clearBtn" class="danger">
+    Clear
+  </button>
 
-      <div class="toolbar-group">
-        <label>Grid</label>
-        <span class="toolbar-small-label">Size</span>
-        <input type="range" id="cellSizeSlider" min="4" max="20" value="10" />
-      </div>
+  <!-- Drawing tools -->
+  <div class="toolbar-group">
+    <button data-tool="paint" class="toolBtn active">Paint</button>
+    <button data-tool="erase" class="toolBtn">Erase</button>
+    <button data-tool="stamp" class="toolBtn">Stamp</button>
+  </div>
 
-      <div class="toolbar-group">
-        <label>Patterns</label>
-        <button id="bestiaryToggle">
-          <span class="icon">📚</span> Bestiary
-        </button>
-      </div>
-    </div>
+  <!-- Grid size -->
+  <div class="toolbar-group">
+    <span class="toolbar-small-label">Size</span>
+    <input type="range" id="cellSizeSlider" min="4" max="20" value="10" />
+  </div>
 
+  <!-- Speed -->
+  <div class="toolbar-group">
+    <span class="toolbar-small-label">Speed</span>
+    <input type="range" id="speedSlider" min="2" max="60" value="20" />
+  </div>
+
+  <!-- Bestiary -->
+  <button id="bestiaryToggle">
+    Bestiary
+  </button>
+</div>
+    <div id="toolbar" class="toolbar">
+  <!-- Play controls -->
+  <button id="runBtn" class="primary">
+    <span id="runLabel">Run</span>
+  </button>
+
+  <button id="randomBtn">
+    Random
+  </button>
+
+  <button id="clearBtn" class="danger">
+    Clear
+  </button>
+
+  <!-- Drawing tools -->
+  <div class="toolbar-group">
+    <button data-tool="paint" class="toolBtn active">Paint</button>
+    <button data-tool="erase" class="toolBtn">Erase</button>
+    <button data-tool="stamp" class="toolBtn">Stamp</button>
+  </div>
+
+  <!-- Grid size -->
+  <div class="toolbar-group">
+    <span class="toolbar-small-label">Size</span>
+    <input type="range" id="cellSizeSlider" min="4" max="20" value="10" />
+  </div>
+
+  <!-- Speed -->
+  <div class="toolbar-group">
+    <span class="toolbar-small-label">Speed</span>
+    <input type="range" id="speedSlider" min="2" max="60" value="20" />
+  </div>
+
+  <!-- Bestiary -->
+  <button id="bestiaryToggle">
+    Bestiary
+  </button>
+</div>
     <div id="universeContainer">
       <canvas id="universe"></canvas>
 
