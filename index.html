@@ -1,1014 +1,598 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Life – Bestiary Edition</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Life</title>
+
+  <!-- PWA hooks (won’t hurt if files aren’t present yet) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b0f16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
   <style>
-    :root {
-      color-scheme: dark;
-      --bg: #050608;
-      --fg: #f5f5f5;
-      --accent: #4caf50;
-      --accent-soft: rgba(76, 175, 80, 0.2);
-      --toolbar-bg: rgba(10, 10, 15, 0.9);
-      --toolbar-border: rgba(255, 255, 255, 0.06);
-      --btn-bg: rgba(30, 30, 40, 0.9);
-      --btn-hover: rgba(70, 70, 90, 0.95);
-      --btn-active: #4caf50;
-      --danger: #f44336;
+    :root{
+      --bg:#0b0f16;
+      --bg2:#070a10;
+      --fg:#e9eef7;
+      --muted:rgba(233,238,247,.65);
+      --glass:rgba(255,255,255,.06);
+      --glass2:rgba(255,255,255,.10);
+      --stroke:rgba(255,255,255,.05);
+      --grid:rgba(255,255,255,.03);
+
+      /* bio-tech cell palette */
+      --cellA:#fdfdff;
+      --cellB:#d4f0ff;
+      --cellC:#7fd6ff;
+
+      --danger:#ef5350;
+      --r:14px;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
     }
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+    html,body{height:100%; margin:0; background:radial-gradient(circle at top, #121828 0, var(--bg2) 55%); color:var(--fg);
+      font-family: ui-sans-serif, -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial; overflow:hidden;}
+    #app{position:fixed; inset:0; display:flex; flex-direction:column;}
+
+    /* One-line top toolbar */
+    .toolbar{
+      display:flex;
+      flex-wrap:nowrap;
+      align-items:center;
+      justify-content:center;
+      gap:.45rem;
+      padding:.45rem .6rem;
+      background:rgba(10,12,18,.75);
+      border-bottom:1px solid var(--stroke);
+      backdrop-filter: blur(16px) saturate(120%);
+      box-shadow: 0 10px 24px rgba(0,0,0,.35);
+      user-select:none;
+    }
+    .toolbar > *{flex:0 0 auto;}
+    .group{display:inline-flex; align-items:center; gap:.25rem; padding:.2rem .25rem; border-radius:999px; background:rgba(255,255,255,.03);}
+    .btn{
+      height:40px;
+      padding:0 .75rem;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.07);
+      color:var(--fg);
+      font-weight:650;
+      font-size:.85rem;
+      letter-spacing:.2px;
+      cursor:pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+      white-space:nowrap;
+    }
+    .btn:active{transform: translateY(1px);}
+    .btn.primary{background:linear-gradient(120deg, rgba(127,214,255,.25), rgba(255,255,255,.06)); border-color:rgba(127,214,255,.35);}
+    .btn.danger{background:linear-gradient(120deg, rgba(239,83,80,.55), rgba(255,255,255,.05)); border-color:rgba(239,83,80,.45);}
+    .btn.active{outline:2px solid rgba(127,214,255,.35);}
+
+    .label{font-size:.7rem; color:var(--muted); margin-right:.25rem; min-width:38px; text-align:right;}
+    input[type="range"]{width:140px;}
+    @media (max-width:820px){
+      .btn{height:38px; padding:0 .6rem; font-size:.8rem;}
+      input[type="range"]{width:110px;}
+      .label{display:none;}
+      .toolbar{gap:.3rem;}
     }
 
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: radial-gradient(circle at top, #101322 0, #050608 55%);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        "Segoe UI", sans-serif;
-      color: var(--fg);
-    }
+    /* Canvas */
+    #stage{position:relative; flex:1; overflow:hidden;}
+    canvas{display:block; width:100%; height:100%; touch-action:none; background:transparent;}
 
-    body {
-      display: flex;
-      align-items: stretch;
-      justify-content: stretch;
+    /* Bestiary modal */
+    .modal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.45);
+      backdrop-filter: blur(2px);
+      display:none;
+      align-items:flex-end;
+      justify-content:center;
+      z-index:999;
     }
-
-    #app {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
+    .modal.show{display:flex;}
+    .sheet{
+      width:min(760px, 96vw);
+      max-height:78vh;
+      background:rgba(12,14,20,.82);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px 16px 0 0;
+      box-shadow: var(--shadow);
+      overflow:auto;
+      padding:12px;
     }
-
-    #universeContainer {
-      position: relative;
-      flex: 1;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at 20% 0%, rgba(255,255,255,0.05) 0, transparent 50%),
-        radial-gradient(circle at 80% 100%, rgba(76,175,80,0.12) 0, transparent 55%),
-        #050608;
+    .sheetHead{
+      display:flex; gap:8px; align-items:center;
+      position:sticky; top:0;
+      background:inherit;
+      padding-bottom:10px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      margin-bottom:10px;
     }
-
-    #universe {
-      display: block;
-      width: 100%;
-      height: 100%;
-      touch-action: none;
-      cursor: crosshair;
+    .sheetHead .title{font-weight:750; letter-spacing:.08em; text-transform:uppercase; font-size:.8rem; opacity:.85; margin-right:auto;}
+    .chip{
+      height:34px; padding:0 .65rem; border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:var(--fg);
+      font-weight:650; font-size:.78rem;
     }
-
-    .toolbar {
-      position: relative;
-      z-index: 10;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.5rem 0.75rem;
-      background: var(--toolbar-bg);
-      border-bottom: 1px solid var(--toolbar-border);
-      backdrop-filter: blur(16px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    .sectionTitle{font-size:.72rem; opacity:.7; text-transform:uppercase; letter-spacing:.08em; margin:10px 0 6px;}
+    .grid{display:flex; flex-wrap:wrap; gap:8px;}
+    .grid button{
+      height:34px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      color:var(--fg);
+      font-weight:650;
+      font-size:.78rem;
+      padding:0 .7rem;
+      cursor:pointer;
     }
-
-    .toolbar-group {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.15rem 0.4rem;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.02);
-    }
-
-    .toolbar-group label {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      opacity: 0.65;
-      padding-right: 0.25rem;
-      border-right: 1px solid rgba(255,255,255,0.08);
-      margin-right: 0.25rem;
-    }
-
-    button {
-      border: none;
-      outline: none;
-      cursor: pointer;
-      font: inherit;
-      border-radius: 999px;
-      padding: 0.35rem 0.7rem;
-      background: var(--btn-bg);
-      color: var(--fg);
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      font-size: 0.8rem;
-      transition: background 0.15s, transform 0.08s, box-shadow 0.15s;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-      white-space: nowrap;
-    }
-
-    button span.icon {
-      font-size: 0.9rem;
-    }
-
-    button:hover {
-      background: var(--btn-hover);
-    }
-
-    button:active {
-      transform: translateY(1px) scale(0.99);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.7);
-    }
-
-    button.primary {
-      background: linear-gradient(120deg, #66bb6a, #43a047);
-      color: #fefefe;
-    }
-
-    button.primary:hover {
-      background: linear-gradient(120deg, #81c784, #43a047);
-    }
-
-    button.danger {
-      background: linear-gradient(120deg, #ef5350, #e53935);
-      color: #fff;
-    }
-
-    button.danger:hover {
-      background: linear-gradient(120deg, #e57373, #e53935);
-    }
-
-    button.active {
-      background: var(--btn-active);
-      color: #fefefe;
-    }
-
-    .toolbar input[type="range"] {
-      width: 90px;
-    }
-
-    .toolbar-small-label {
-      font-size: 0.7rem;
-      opacity: 0.7;
-      margin-right: 0.25rem;
-    }
-
-    #toolbarToggle {
-      position: absolute;
-      z-index: 15;
-      left: 0.6rem;
-      bottom: 0.6rem;
-      padding: 0.25rem 0.5rem;
-      font-size: 0.7rem;
-      border-radius: 999px;
-      background: rgba(40,40,50,0.9);
-      color: rgba(255,255,255,0.8);
-      box-shadow: 0 4px 10px rgba(0,0,0,0.7);
-    }
-
-    #fakeFullscreen {
-      position: absolute;
-      right: 0.75rem;
-      bottom: 0.7rem;
-      z-index: 15;
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      padding: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
-      background: rgba(15,15,25,0.95);
-      box-shadow: 0 4px 14px rgba(0,0,0,0.7);
-    }
-
-    #fakeFullscreen span {
-      margin: 0;
-    }
-
-    #bestiaryPanel {
-      position: absolute;
-      z-index: 20;
-      right: 0.75rem;
-      top: 0.9rem;
-      max-width: min(340px, 80vw);
-      max-height: 70vh;
-      overflow: auto;
-      background: radial-gradient(circle at top left, rgba(76,175,80,0.18), rgba(10,10,15,0.98));
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.1);
-      padding: 0.75rem 0.75rem 0.6rem;
-      box-shadow: 0 18px 40px rgba(0,0,0,0.8);
-      backdrop-filter: blur(22px);
-      display: none;
-    }
-
-    #bestiaryPanel.visible {
-      display: block;
-    }
-
-    #bestiaryHeader {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 0.4rem;
-    }
-
-    #bestiaryHeader h2 {
-      font-size: 0.9rem;
-      margin: 0;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      opacity: 0.85;
-    }
-
-    #bestiaryHeader small {
-      font-size: 0.7rem;
-      opacity: 0.6;
-    }
-
-    .bestiary-section {
-      margin-top: 0.4rem;
-      padding-top: 0.4rem;
-      border-top: 1px solid rgba(255,255,255,0.04);
-    }
-
-    .bestiary-section:first-of-type {
-      border-top: none;
-      padding-top: 0.1rem;
-    }
-
-    .bestiary-section-title {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      opacity: 0.7;
-      margin-bottom: 0.2rem;
-    }
-
-    .bestiary-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-    }
-
-    .bestiary-buttons button {
-      font-size: 0.72rem;
-      box-shadow: none;
-      padding: 0.3rem 0.55rem;
-    }
-
-    .bestiary-buttons button.active {
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.35);
-    }
-
-    .bestiary-note {
-      margin-top: 0.45rem;
-      font-size: 0.7rem;
-      opacity: 0.7;
-      line-height: 1.3;
-    }
-
-    @media (max-width: 700px) {
-      .toolbar {
-        gap: 0.25rem;
-        padding: 0.4rem 0.45rem;
-      }
-      button {
-        padding: 0.3rem 0.55rem;
-      }
-      .toolbar-group label {
-        display: none;
-      }
-    }
+    .note{font-size:.78rem; color:rgba(233,238,247,.65); line-height:1.25; margin-top:10px;}
   </style>
 </head>
+
 <body>
-  <div id="app">
-    <div id="toolbar" class="toolbar">
-  <!-- Play controls -->
-  <button id="runBtn" class="primary">
-    <span id="runLabel">Run</span>
-  </button>
+<div id="app">
+  <!-- TOP TOOLBAR -->
+  <div class="toolbar" id="toolbar">
+    <button class="btn primary" id="runBtn"><span id="runLabel">Run</span></button>
+    <button class="btn" id="randomBtn">Random</button>
+    <button class="btn danger" id="clearBtn">Clear</button>
 
-  <button id="randomBtn">
-    Random
-  </button>
+    <div class="group">
+      <button class="btn active" id="toolPaint">Paint</button>
+      <button class="btn" id="toolErase">Erase</button>
+      <button class="btn" id="toolStamp">Stamp</button>
+    </div>
 
-  <button id="clearBtn" class="danger">
-    Clear
-  </button>
+    <div class="group">
+      <span class="label">Speed</span>
+      <input id="speedSlider" type="range" min="2" max="60" value="20" />
+    </div>
 
-  <!-- Drawing tools -->
-  <div class="toolbar-group">
-    <button data-tool="paint" class="toolBtn active">Paint</button>
-    <button data-tool="erase" class="toolBtn">Erase</button>
-    <button data-tool="stamp" class="toolBtn">Stamp</button>
+    <div class="group">
+      <span class="label">Cell</span>
+      <input id="cellSizeSlider" type="range" min="4" max="24" value="10" />
+    </div>
+
+    <button class="btn" id="bestiaryBtn">Bestiary</button>
   </div>
 
-  <!-- Grid size -->
-  <div class="toolbar-group">
-    <span class="toolbar-small-label">Size</span>
-    <input type="range" id="cellSizeSlider" min="4" max="20" value="10" />
+  <!-- CANVAS -->
+  <div id="stage">
+    <canvas id="life"></canvas>
   </div>
-
-  <!-- Speed -->
-  <div class="toolbar-group">
-    <span class="toolbar-small-label">Speed</span>
-    <input type="range" id="speedSlider" min="2" max="60" value="20" />
-  </div>
-
-  <!-- Bestiary -->
-  <button id="bestiaryToggle">
-    Bestiary
-  </button>
 </div>
-    <div id="toolbar" class="toolbar">
-  <!-- Play controls -->
-  <button id="runBtn" class="primary">
-    <span id="runLabel">Run</span>
-  </button>
 
-  <button id="randomBtn">
-    Random
-  </button>
+<!-- BESTIARY -->
+<div class="modal" id="bestiaryModal" aria-hidden="true">
+  <div class="sheet">
+    <div class="sheetHead">
+      <div class="title">Bestiary</div>
+      <button class="chip" id="closeBestiary">Close</button>
+    </div>
 
-  <button id="clearBtn" class="danger">
-    Clear
-  </button>
+    <div class="sectionTitle">Gliders</div>
+    <div class="grid">
+      <button data-stamp="gliderSE">Glider SE</button>
+      <button data-stamp="gliderNE">Glider NE</button>
+      <button data-stamp="gliderNW">Glider NW</button>
+      <button data-stamp="gliderSW">Glider SW</button>
+    </div>
 
-  <!-- Drawing tools -->
-  <div class="toolbar-group">
-    <button data-tool="paint" class="toolBtn active">Paint</button>
-    <button data-tool="erase" class="toolBtn">Erase</button>
-    <button data-tool="stamp" class="toolBtn">Stamp</button>
-  </div>
+    <div class="sectionTitle">Spaceships</div>
+    <div class="grid">
+      <button data-stamp="lwss">LWSS</button>
+    </div>
 
-  <!-- Grid size -->
-  <div class="toolbar-group">
-    <span class="toolbar-small-label">Size</span>
-    <input type="range" id="cellSizeSlider" min="4" max="20" value="10" />
-  </div>
+    <div class="sectionTitle">Methuselahs</div>
+    <div class="grid">
+      <button data-stamp="rpent">R-pentomino</button>
+    </div>
 
-  <!-- Speed -->
-  <div class="toolbar-group">
-    <span class="toolbar-small-label">Speed</span>
-    <input type="range" id="speedSlider" min="2" max="60" value="20" />
-  </div>
+    <div class="sectionTitle">Guns</div>
+    <div class="grid">
+      <button data-stamp="gosperE">Gosper →</button>
+      <button data-stamp="gosperW">Gosper ←</button>
+      <button data-stamp="gosperN">Gosper ↑</button>
+      <button data-stamp="gosperS">Gosper ↓</button>
+    </div>
 
-  <!-- Bestiary -->
-  <button id="bestiaryToggle">
-    Bestiary
-  </button>
-</div>
-    <div id="universeContainer">
-      <canvas id="universe"></canvas>
+    <div class="sectionTitle">Cathedrals</div>
+    <div class="grid">
+      <button data-stamp="miniHyperDeath">Mini Hyper-Death</button>
+    </div>
 
-      <button id="toolbarToggle" title="Hide/show toolbar">Toolbar</button>
-      <button id="fakeFullscreen" title="Toggle full view">
-        <span>⤢</span>
-      </button>
-
-      <div id="bestiaryPanel">
-        <div id="bestiaryHeader">
-          <div>
-            <h2>Bestiary</h2>
-            <small>Choose a beast, then tap the universe to stamp</small>
-          </div>
-          <button id="bestiaryClose" style="font-size:0.7rem;padding:0.15rem 0.5rem;">✕</button>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Gliders</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="gliderSE">Glider SE</button>
-            <button class="patternBtn" data-pattern="gliderNE">Glider NE</button>
-            <button class="patternBtn" data-pattern="gliderNW">Glider NW</button>
-            <button class="patternBtn" data-pattern="gliderSW">Glider SW</button>
-          </div>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Methuselahs</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="rPentomino">R-pentomino</button>
-          </div>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Spaceships</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="spaceshipLWSS">LWSS</button>
-            <button class="patternBtn" data-pattern="spaceshipMWSS">MWSS</button>
-            <button class="patternBtn" data-pattern="spaceshipHWSS">HWSS</button>
-          </div>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Guns</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="gunGosperE">Gosper gun →</button>
-            <button class="patternBtn" data-pattern="gunGosperW">Gosper gun ←</button>
-            <button class="patternBtn" data-pattern="gunGosperN">Gosper gun ↑</button>
-            <button class="patternBtn" data-pattern="gunGosperS">Gosper gun ↓</button>
-          </div>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Engines</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="engineSchick">Schick engine*</button>
-            <button class="patternBtn" data-pattern="engineCordership">Cordership*</button>
-            <button class="patternBtn" data-pattern="enginePufferfish">Pufferfish*</button>
-            <button class="patternBtn" data-pattern="engineBasilisk">Basilisk*</button>
-          </div>
-          <div class="bestiary-note">
-            *Currently stylised engine patterns; you can later swap in exact LifeWiki RLE patterns.
-          </div>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Puffers</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="pufferTrain">Puffer train</button>
-          </div>
-        </div>
-
-        <div class="bestiary-section">
-          <div class="bestiary-section-title">Cathedrals</div>
-          <div class="bestiary-buttons">
-            <button class="patternBtn" data-pattern="miniHyperDeath">Mini Hyper-Death</button>
-          </div>
-          <div class="bestiary-note">
-            Mini Hyper-Death is stamped in the centre and turns off edge wrapping so it can expand outward. Clear the grid to return to a wrapping world.
-          </div>
-        </div>
-      </div>
+    <div class="note">
+      Tip: choose a beast, then tap the universe to stamp. “Mini Hyper-Death” disables edge wrapping so it can expand outward.
+      Clear or Random re-enables wrapping.
     </div>
   </div>
+</div>
 
-  <script>
-    const canvas = document.getElementById('universe');
-    const ctx = canvas.getContext('2d');
-    const container = document.getElementById('universeContainer');
+<script>
+(() => {
+  // ---------- DOM ----------
+  const canvas = document.getElementById('life');
+  const ctx = canvas.getContext('2d', { alpha: false });
 
-    const runBtn = document.getElementById('runBtn');
-    const runLabel = document.getElementById('runLabel');
-    const stepBtn = document.getElementById('stepBtn');
-    const randomBtn = document.getElementById('randomBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const speedSlider = document.getElementById('speedSlider');
-    const cellSizeSlider = document.getElementById('cellSizeSlider');
-    const toolbar = document.getElementById('toolbar');
-    const toolbarToggle = document.getElementById('toolbarToggle');
-    const fakeFullscreen = document.getElementById('fakeFullscreen');
-    const toolButtons = Array.from(document.querySelectorAll('.toolBtn'));
+  const runBtn = document.getElementById('runBtn');
+  const runLabel = document.getElementById('runLabel');
+  const randomBtn = document.getElementById('randomBtn');
+  const clearBtn = document.getElementById('clearBtn');
 
-    const bestiaryToggle = document.getElementById('bestiaryToggle');
-    const bestiaryPanel = document.getElementById('bestiaryPanel');
-    const bestiaryClose = document.getElementById('bestiaryClose');
-    const patternButtons = Array.from(document.querySelectorAll('.patternBtn'));
+  const toolPaint = document.getElementById('toolPaint');
+  const toolErase = document.getElementById('toolErase');
+  const toolStamp = document.getElementById('toolStamp');
 
-    let cellSize = parseInt(cellSizeSlider.value, 10);
-    let rows = 0;
-    let cols = 0;
-    let grid = [];
-    let running = false;
-    let timerId = null;
-    let speed = parseInt(speedSlider.value, 10); // generations per second
-    let currentTool = 'paint'; // 'paint' | 'erase' | 'stamp'
-    let currentStamp = null;
-    let pointerDown = false;
-    let toolbarHidden = false;
-    let wrapEdges = true;
+  const speedSlider = document.getElementById('speedSlider');
+  const cellSizeSlider = document.getElementById('cellSizeSlider');
 
-    // Base patterns via coordinate arrays
-    const BASE_PATTERNS = {
-      // Gliders in four orientations (small 3x3)
-      gliderSE: [
-        [0, 1],
-        [1, 2],
-        [2, 0], [2, 1], [2, 2]
-      ],
-      gliderNE: [
-        [0, 0], [0, 1], [0, 2],
-        [1, 0],
-        [2, 1]
-      ],
-      gliderNW: [
-        [0, 0], [0, 1], [0, 2],
-        [1, 2],
-        [2, 1]
-      ],
-      gliderSW: [
-        [0, 1],
-        [1, 0],
-        [2, 0], [2, 1], [2, 2]
-      ],
+  const bestiaryBtn = document.getElementById('bestiaryBtn');
+  const bestiaryModal = document.getElementById('bestiaryModal');
+  const closeBestiary = document.getElementById('closeBestiary');
 
-      // R-pentomino
-      rPentomino: [
-        [0, 1], [0, 2],
-        [1, 0], [1, 1],
-        [2, 1]
-      ],
+  // ---------- State ----------
+  let DPR = Math.max(1, window.devicePixelRatio || 1);
+  let cellSize = parseInt(cellSizeSlider.value, 10);
+  let cols = 0, rows = 0;
+  let grid = new Uint8Array(0);
+  let next = new Uint8Array(0);
 
-      // Spaceships (phased approximations of LWSS/MWSS/HWSS)
-      // LWSS (5x4)
-      spaceshipLWSS: [
-        [0,1],[0,2],[0,3],
-        [1,0],[1,4],
-        [2,0],
-        [3,0],[3,3]
-      ],
-      // MWSS (6x5)
-      spaceshipMWSS: [
-        [0,1],[0,2],[0,3],[0,4],
-        [1,0],[1,5],
-        [2,0],
-        [3,0],[3,4],
-        [4,2],[4,3]
-      ],
-      // HWSS (7x5)
-      spaceshipHWSS: [
-        [0,1],[0,2],[0,3],[0,4],[0,5],
-        [1,0],[1,6],
-        [2,0],
-        [3,0],[3,5],
-        [4,2],[4,3],[4,4]
-      ],
+  let running = false;
+  let fps = parseInt(speedSlider.value, 10);
+  let acc = 0;
+  let last = performance.now();
 
-      // Gosper glider gun (classic orientation)
-      gunGosperBase: [
-        [5, 1], [5, 2], [6, 1], [6, 2],
-        [5, 11], [6, 11], [7, 11],
-        [4, 12],
-        [3, 13], [3, 14],
-        [8, 12],
-        [9, 13], [9, 14],
-        [6, 15],
-        [4, 16], [5, 17], [6, 17], [7, 17],
-        [6, 18],
-        [8, 16],
-        [3, 21], [4, 21], [5, 21],
-        [3, 22], [4, 22], [5, 22],
-        [2, 23], [6, 23],
-        [1, 25], [2, 25], [6, 25], [7, 25],
-        [3, 35], [4, 35],
-        [3, 36], [4, 36]
-      ],
+  let tool = 'paint'; // paint | erase | stamp
+  let currentStamp = null;
+  let wrapEdges = true;
 
-      // Simple puffer-like pattern
-      pufferTrain: [
-        [0, 1], [0, 2], [0, 3],
-        [1, 0], [1, 4],
-        [2, 0],
-        [3, 1], [3, 3],
-        [5, 2], [5, 3],
-        [6, 2], [6, 3]
-      ],
+  // ---------- Helpers ----------
+  const idx = (x, y) => y * cols + x;
+  const wrap = (x, y) => ((y + rows) % rows) * cols + ((x + cols) % cols);
 
-      // Stylised engines (placeholders to be replaced with true LifeWiki versions)
-      engineSchick: [
-        [0,0],[0,1],[0,2],
-        [1,0],[1,3],
-        [2,0],
-        [3,1],[3,3],
-        [5,2],[5,3],
-        [6,2],[6,3]
-      ],
-      engineCordership: [
-        [0,2],[0,3],
-        [1,0],[1,1],[1,4],
-        [2,0],[2,5],
-        [3,1],[3,5],
-        [4,3],[4,4]
-      ],
-      enginePufferfish: [
-        [0,1],[0,2],[0,3],
-        [1,0],[1,4],
-        [2,0],
-        [3,1],[3,3],
-        [4,1],[4,2],[4,3]
-      ],
-      engineBasilisk: [
-        [0,1],[0,2],[0,3],
-        [1,0],[1,4],
-        [2,0],[2,4],
-        [3,1],[3,3],
-        [5,2],[5,3],
-        [6,2],[6,3]
-      ]
-    };
+  function resize() {
+    DPR = Math.max(1, window.devicePixelRatio || 1);
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.floor(rect.width * DPR);
+    const h = Math.floor(rect.height * DPR);
 
-    function rotatePattern(coords, steps) {
-      let c = coords.map(([y,x]) => [y,x]);
-      const s = ((steps % 4) + 4) % 4;
-      for (let i = 0; i < s; i++) {
-        // 90° CCW rotation: (y,x) -> (x,-y)
-        c = c.map(([y,x]) => [x, -y]);
-      }
-      // normalize to non-negative
-      let minY = Infinity, minX = Infinity;
-      c.forEach(([y,x]) => {
-        if (y < minY) minY = y;
-        if (x < minX) minX = x;
-      });
-      return c.map(([y,x]) => [y - minY, x - minX]);
-    }
+    canvas.width = w;
+    canvas.height = h;
 
-    function getPattern(name) {
-      if (name === 'gliderSE') return BASE_PATTERNS.gliderSE;
-      if (name === 'gliderNE') return BASE_PATTERNS.gliderNE;
-      if (name === 'gliderNW') return BASE_PATTERNS.gliderNW;
-      if (name === 'gliderSW') return BASE_PATTERNS.gliderSW;
+    cols = Math.max(8, Math.floor(w / (cellSize * DPR)));
+    rows = Math.max(8, Math.floor(h / (cellSize * DPR)));
 
-      if (name === 'rPentomino') return BASE_PATTERNS.rPentomino;
+    grid = new Uint8Array(cols * rows);
+    next = new Uint8Array(cols * rows);
 
-      if (name === 'spaceshipLWSS') return BASE_PATTERNS.spaceshipLWSS;
-      if (name === 'spaceshipMWSS') return BASE_PATTERNS.spaceshipMWSS;
-      if (name === 'spaceshipHWSS') return BASE_PATTERNS.spaceshipHWSS;
+    draw();
+  }
 
-      if (name === 'gunGosperE') return BASE_PATTERNS.gunGosperBase;
-      if (name === 'gunGosperN') return rotatePattern(BASE_PATTERNS.gunGosperBase, 1);
-      if (name === 'gunGosperW') return rotatePattern(BASE_PATTERNS.gunGosperBase, 2);
-      if (name === 'gunGosperS') return rotatePattern(BASE_PATTERNS.gunGosperBase, 3);
+  function randomize(density = 0.18) {
+    for (let i = 0; i < grid.length; i++) grid[i] = Math.random() < density ? 1 : 0;
+    wrapEdges = true;
+    draw();
+  }
 
-      if (name === 'pufferTrain') return BASE_PATTERNS.pufferTrain;
+  function clearAll() {
+    grid.fill(0);
+    wrapEdges = true;
+    draw();
+  }
 
-      if (name === 'engineSchick') return BASE_PATTERNS.engineSchick;
-      if (name === 'engineCordership') return BASE_PATTERNS.engineCordership;
-      if (name === 'enginePufferfish') return BASE_PATTERNS.enginePufferfish;
-      if (name === 'engineBasilisk') return BASE_PATTERNS.engineBasilisk;
-
-      if (name === 'miniHyperDeath') {
-        // Mini Hyper-Death as composite: four Gosper guns around centre
-        const gun = BASE_PATTERNS.gunGosperBase;
-        const gunN = rotatePattern(gun, 1);
-        const gunW = rotatePattern(gun, 2);
-        const gunS = rotatePattern(gun, 3);
-        const result = [];
-        gun.forEach(([y,x]) => result.push([y,x - 20]));
-        gunW.forEach(([y,x]) => result.push([y,x + 20]));
-        gunN.forEach(([y,x]) => result.push([y + 20,x]));
-        gunS.forEach(([y,x]) => result.push([y - 20,x]));
-        return result;
-      }
-
-      return null;
-    }
-
-    function createEmptyGrid() {
-      grid = new Array(rows);
-      for (let y = 0; y < rows; y++) {
-        grid[y] = new Array(cols).fill(0);
-      }
-    }
-
-    function resizeGrid(preserve = true) {
-      const rect = container.getBoundingClientRect();
-      const newCols = Math.max(5, Math.floor(rect.width / cellSize));
-      const newRows = Math.max(5, Math.floor(rect.height / cellSize));
-
-      const oldRows = rows;
-      const oldCols = cols;
-      const oldGrid = grid;
-
-      cols = newCols;
-      rows = newRows;
-
-      canvas.width = cols * cellSize;
-      canvas.height = rows * cellSize;
-
-      createEmptyGrid();
-
-      if (preserve && oldGrid && oldRows && oldCols) {
-        const copyRows = Math.min(oldRows, rows);
-        const copyCols = Math.min(oldCols, cols);
-        for (let y = 0; y < copyRows; y++) {
-          for (let x = 0; x < copyCols; x++) {
-            grid[y][x] = oldGrid[y][x];
-          }
+  function step() {
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        let n = 0;
+        if (wrapEdges) {
+          n += grid[wrap(x-1,y-1)] + grid[wrap(x,y-1)] + grid[wrap(x+1,y-1)];
+          n += grid[wrap(x-1,y  )]                + grid[wrap(x+1,y  )];
+          n += grid[wrap(x-1,y+1)] + grid[wrap(x,y+1)] + grid[wrap(x+1,y+1)];
+        } else {
+          const get = (xx,yy) => (xx<0||yy<0||xx>=cols||yy>=rows) ? 0 : grid[idx(xx,yy)];
+          n += get(x-1,y-1) + get(x,y-1) + get(x+1,y-1);
+          n += get(x-1,y  )            + get(x+1,y  );
+          n += get(x-1,y+1) + get(x,y+1) + get(x+1,y+1);
         }
+
+        const i = idx(x,y);
+        const g = grid[i];
+        next[i] = (g ? (n===2 || n===3) : (n===3)) ? 1 : 0;
       }
-
-      draw();
     }
+    const t = grid; grid = next; next = t;
+  }
 
-    function draw() {
-      ctx.fillStyle = '#050609';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  function draw() {
+    // background
+    ctx.fillStyle = '#0b0f16';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    const scale = cellSize * DPR;
+
+    // grid lines
+    if (scale >= 8) {
       ctx.strokeStyle = 'rgba(255,255,255,0.03)';
       ctx.lineWidth = 1;
+      ctx.beginPath();
       for (let x = 0; x <= cols; x++) {
-        ctx.beginPath();
-        ctx.moveTo(x * cellSize + 0.5, 0);
-        ctx.lineTo(x * cellSize + 0.5, canvas.height);
-        ctx.stroke();
+        const px = x * scale + 0.5;
+        ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height);
       }
       for (let y = 0; y <= rows; y++) {
-        ctx.beginPath();
-        ctx.moveTo(0, y * cellSize + 0.5);
-        ctx.lineTo(canvas.width, y * cellSize + 0.5);
-        ctx.stroke();
+        const py = y * scale + 0.5;
+        ctx.moveTo(0, py); ctx.lineTo(canvas.width, py);
       }
-
-      ctx.fillStyle = '#9be15a';
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-          if (grid[y][x]) {
-            ctx.fillRect(
-              x * cellSize + 1,
-              y * cellSize + 1,
-              cellSize - 1.5,
-              cellSize - 1.5
-            );
-          }
-        }
-      }
+      ctx.stroke();
     }
 
-    function getCellFromEvent(e) {
-      const rect = canvas.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const x = Math.floor((clientX - rect.left) / cellSize);
-      const y = Math.floor((clientY - rect.top) / cellSize);
-      if (x < 0 || x >= cols || y < 0 || y >= rows) return null;
-      return { x, y };
-    }
+    // cells (soft bio-tech glow)
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (!grid[idx(x,y)]) continue;
 
-    function applyToolAt(x, y) {
-      if (currentTool === 'paint') {
-        grid[y][x] = 1;
-        draw();
-      } else if (currentTool === 'erase') {
-        grid[y][x] = 0;
-        draw();
-      } else if (currentTool === 'stamp') {
-        if (!currentStamp) return;
-        stampPattern(currentStamp, y, x);
+        const px = x * scale;
+        const py = y * scale;
+        const pad = Math.max(1, Math.floor(scale * 0.12));
+        const s = Math.max(1, Math.floor(scale) - pad * 2);
+
+        const cx = px + pad + s/2;
+        const cy = py + pad + s/2;
+        const r = s * 0.8;
+
+        const g = ctx.createRadialGradient(cx, cy, r * 0.12, cx, cy, r);
+        g.addColorStop(0,  '#fdfdff');
+        g.addColorStop(0.6,'#d4f0ff');
+        g.addColorStop(1,  '#7fd6ff');
+
+        ctx.fillStyle = g;
+        ctx.fillRect(px + pad, py + pad, s, s);
       }
     }
+  }
 
-    function clearGrid() {
-      createEmptyGrid();
-      wrapEdges = true;
-      draw();
+  function screenToCell(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    const x = (clientX - r.left) * DPR;
+    const y = (clientY - r.top) * DPR;
+    const cx = Math.floor(x / (cellSize * DPR));
+    const cy = Math.floor(y / (cellSize * DPR));
+    return { cx, cy };
+  }
+
+  function setTool(t) {
+    tool = t;
+    toolPaint.classList.toggle('active', t === 'paint');
+    toolErase.classList.toggle('active', t === 'erase');
+    toolStamp.classList.toggle('active', t === 'stamp');
+  }
+
+  // ---------- Patterns (coords are [x,y] offsets) ----------
+  const PAT = {
+    // gliders (canonical 3x3 shapes in 4 dirs)
+    gliderSE: [[1,0],[2,1],[0,2],[1,2],[2,2]],
+    gliderNE: [[0,0],[1,0],[2,0],[0,1],[1,2]],
+    gliderNW: [[0,0],[1,0],[2,0],[2,1],[1,2]],
+    gliderSW: [[1,0],[0,1],[0,2],[1,2],[2,2]],
+
+    rpent: [[0,1],[1,0],[1,1],[1,2],[2,1]],
+
+    // LWSS (canonical)
+    lwss: [
+      [0,0],[3,0],
+      [4,1],
+      [0,2],[4,2],
+      [1,3],[2,3],[3,3],[4,3]
+    ],
+
+    // Gosper gun base (east)
+    gosperE: [
+      [5,1],[6,1],[5,2],[6,2],
+      [5,11],[6,11],[7,11],[4,12],[8,12],[3,13],[9,13],[3,14],[9,14],[6,15],[4,16],[8,16],[5,17],[6,17],[7,17],[6,18],
+      [3,21],[4,21],[5,21],[3,22],[4,22],[5,22],[2,23],[6,23],
+      [1,25],[2,25],[6,25],[7,25],
+      [3,35],[4,35],[3,36],[4,36]
+    ],
+  };
+
+  function rotate90(coords) { // (x,y)->(y,-x)
+    let out = coords.map(([x,y]) => [y, -x]);
+    // normalize to 0+
+    let minX=Infinity, minY=Infinity;
+    for (const [x,y] of out){ if(x<minX)minX=x; if(y<minY)minY=y; }
+    return out.map(([x,y]) => [x-minX, y-minY]);
+  }
+
+  function rotate(coords, times) {
+    let c = coords;
+    const t = ((times%4)+4)%4;
+    for (let i=0;i<t;i++) c = rotate90(c);
+    return c;
+  }
+
+  function getStamp(name) {
+    if (name === 'gosperN') return rotate(PAT.gosperE, 1);
+    if (name === 'gosperW') return rotate(PAT.gosperE, 2);
+    if (name === 'gosperS') return rotate(PAT.gosperE, 3);
+    if (name === 'miniHyperDeath') {
+      // 4 guns around a center point
+      const E = PAT.gosperE;
+      const N = rotate(PAT.gosperE,1);
+      const W = rotate(PAT.gosperE,2);
+      const S = rotate(PAT.gosperE,3);
+      const out = [];
+      for (const [x,y] of E) out.push([x-20,y]);
+      for (const [x,y] of W) out.push([x+20,y]);
+      for (const [x,y] of N) out.push([x,y+20]);
+      for (const [x,y] of S) out.push([x,y-20]);
+      return out;
+    }
+    return PAT[name] || null;
+  }
+
+  function stampAtCell(name, cx, cy) {
+    const coords = getStamp(name);
+    if (!coords) return;
+
+    if (name === 'miniHyperDeath') {
+      wrapEdges = false;
+      cx = Math.floor(cols/2);
+      cy = Math.floor(rows/2);
     }
 
-    function randomFill() {
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-          grid[y][x] = Math.random() < 0.22 ? 1 : 0;
-        }
-      }
-      wrapEdges = true;
-      draw();
-    }
+    // center stamp bounding box on (cx,cy)
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for (const [x,y] of coords){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; }
+    const w = maxX-minX+1, h=maxY-minY+1;
+    const ox = cx - Math.floor(w/2) - minX;
+    const oy = cy - Math.floor(h/2) - minY;
 
-    function lifeStep() {
-      const newGrid = new Array(rows);
-      for (let y = 0; y < rows; y++) {
-        newGrid[y] = new Array(cols).fill(0);
-      }
-
-      const get = (yy, xx) => {
-        if (wrapEdges) {
-          const y2 = (yy + rows) % rows;
-          const x2 = (xx + cols) % cols;
-          return grid[y2][x2];
-        } else {
-          if (yy < 0 || yy >= rows || xx < 0 || xx >= cols) return 0;
-          return grid[yy][xx];
-        }
-      };
-
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-          let n =
-            get(y - 1, x - 1) + get(y - 1, x) + get(y - 1, x + 1) +
-            get(y, x - 1) +               get(y, x + 1) +
-            get(y + 1, x - 1) + get(y + 1, x) + get(y + 1, x + 1);
-
-          if (grid[y][x]) {
-            newGrid[y][x] = (n === 2 || n === 3) ? 1 : 0;
-          } else {
-            newGrid[y][x] = (n === 3) ? 1 : 0;
-          }
-        }
-      }
-
-      grid = newGrid;
-      draw();
-    }
-
-    function start() {
-      if (running) return;
-      running = true;
-      runLabel.textContent = 'Pause';
-      runBtn.querySelector('.icon').textContent = '⏸';
-      scheduleNextStep();
-    }
-
-    function stop() {
-      running = false;
-      runLabel.textContent = 'Run';
-      runBtn.querySelector('.icon').textContent = '▶';
-      if (timerId) {
-        clearTimeout(timerId);
-        timerId = null;
-      }
-    }
-
-    function scheduleNextStep() {
-      if (!running) return;
-      lifeStep();
-      const interval = 1000 / speed;
-      timerId = setTimeout(() => {
-        requestAnimationFrame(scheduleNextStep);
-      }, interval);
-    }
-
-    function stampPattern(patternName, row, col) {
-      const coords = getPattern(patternName);
-      if (!coords || !coords.length) return;
-
-      if (patternName === 'miniHyperDeath') {
-        wrapEdges = false;
-        const cy = Math.floor(rows / 2);
-        const cx = Math.floor(cols / 2);
-        stampCoordsAt(coords, cy, cx, true);
+    for (const [x,y] of coords) {
+      const xx = ox + x;
+      const yy = oy + y;
+      if (wrapEdges) {
+        grid[wrap(xx,yy)] = 1;
       } else {
-        stampCoordsAt(coords, row, col, true);
+        if (xx<0||yy<0||xx>=cols||yy>=rows) continue;
+        grid[idx(xx,yy)] = 1;
       }
     }
+    draw();
+  }
 
-    function stampCoordsAt(coords, centerRow, centerCol, center) {
-      let minY = Infinity, maxY = -Infinity;
-      let minX = Infinity, maxX = -Infinity;
-      coords.forEach(([y,x]) => {
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-      });
-      const h = maxY - minY + 1;
-      const w = maxX - minX + 1;
+  // ---------- Input ----------
+  let pointerDown = false;
 
-      let originY, originX;
-      if (center) {
-        originY = centerRow - Math.floor(h / 2);
-        originX = centerCol - Math.floor(w / 2);
-      } else {
-        originY = centerRow;
-        originX = centerCol;
+  canvas.addEventListener('pointerdown', (e) => {
+    pointerDown = true;
+    const {cx,cy} = screenToCell(e.clientX, e.clientY);
+
+    if (tool === 'stamp' && currentStamp) {
+      stampAtCell(currentStamp, cx, cy);
+      return;
+    }
+
+    if (cx<0||cy<0||cx>=cols||cy>=rows) return;
+    if (tool === 'paint') grid[idx(cx,cy)] = 1;
+    if (tool === 'erase') grid[idx(cx,cy)] = 0;
+    draw();
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pointerDown) return;
+    if (tool === 'stamp') return; // stamp is click-only
+    const {cx,cy} = screenToCell(e.clientX, e.clientY);
+    if (cx<0||cy<0||cx>=cols||cy>=rows) return;
+    if (tool === 'paint') grid[idx(cx,cy)] = 1;
+    if (tool === 'erase') grid[idx(cx,cy)] = 0;
+    draw();
+  });
+
+  window.addEventListener('pointerup', () => { pointerDown = false; });
+
+  // ---------- UI wiring ----------
+  runBtn.addEventListener('click', () => {
+    running = !running;
+    runLabel.textContent = running ? 'Pause' : 'Run';
+  });
+
+  randomBtn.addEventListener('click', () => {
+    running = false;
+    runLabel.textContent = 'Run';
+    randomize(0.18);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    running = false;
+    runLabel.textContent = 'Run';
+    clearAll();
+  });
+
+  toolPaint.addEventListener('click', () => { setTool('paint'); currentStamp = null; });
+  toolErase.addEventListener('click', () => { setTool('erase'); currentStamp = null; });
+  toolStamp.addEventListener('click', () => { setTool('stamp'); });
+
+  speedSlider.addEventListener('input', () => { fps = parseInt(speedSlider.value, 10); });
+  cellSizeSlider.addEventListener('input', () => {
+    cellSize = parseInt(cellSizeSlider.value, 10);
+    resize();
+  });
+
+  bestiaryBtn.addEventListener('click', () => {
+    bestiaryModal.classList.add('show');
+    bestiaryModal.setAttribute('aria-hidden', 'false');
+  });
+
+  closeBestiary.addEventListener('click', () => {
+    bestiaryModal.classList.remove('show');
+    bestiaryModal.setAttribute('aria-hidden', 'true');
+  });
+
+  bestiaryModal.addEventListener('click', (e) => {
+    if (e.target === bestiaryModal) {
+      bestiaryModal.classList.remove('show');
+      bestiaryModal.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  // Bestiary pattern selection
+  bestiaryModal.querySelectorAll('[data-stamp]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentStamp = btn.getAttribute('data-stamp');
+      setTool('stamp');
+      bestiaryModal.classList.remove('show');
+      bestiaryModal.setAttribute('aria-hidden', 'true');
+    });
+  });
+
+  // ---------- Main loop ----------
+  function frame(ts) {
+    const dt = (ts - last) / 1000;
+    last = ts;
+    acc += dt;
+
+    const stepT = 1 / Math.max(2, fps);
+
+    if (running) {
+      while (acc >= stepT) {
+        step();
+        acc -= stepT;
       }
-
-      coords.forEach(([y,x]) => {
-        const yy = originY + (y - minY);
-        const xx = originX + (x - minX);
-        if (yy >= 0 && yy < rows && xx >= 0 && xx < cols) {
-          grid[yy][xx] = 1;
-        }
-      });
-
       draw();
     }
 
-    function setTool(tool) {
-      currentTool = tool;
-      if (tool === 'paint') currentStamp = null;
-      if (tool === 'erase') currentStamp = null;
+    requestAnimationFrame(frame);
+  }
 
-      toolButtons.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tool === tool);
+  // ---------- Boot ----------
+  function boot() {
+    resize();
+    clearAll();
+    requestAnimationFrame(frame);
+
+    // Service worker registration (safe)
+    const APP_VERSION = "v1";
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js?v=' + APP_VERSION).catch(()=>{});
       });
     }
+  }
 
-    canvas.addEventListener('pointerdown', (e) => {
-      const cell = getCellFromEvent(e);
-      if (!cell) return;
-      pointerDown = true;
-
-      if (currentTool === 'stamp') {
-        applyToolAt(cell.x, cell.y);
-        return;
-      }
-      applyToolAt(cell.x, cell.y);
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (!pointerDown) return;
-      if (currentTool === 'stamp') return;
-      const cell = getCellFromEvent(e);
-      if (!cell) return;
-      applyToolAt(cell.x, cell.y);
-    });
-
-    window.addEventListener('pointerup', () => {
-      pointerDown = false;
-    });
-    window.addEventListener('pointercancel', () => {
-      pointerDown = false;
-    });
-
-    toolButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const t = btn.dataset.tool;
-        setTool(t);
-      });
-    });
-
-    runBtn.addEventListener('click', () => {
-      if (running) stop(); else start();
-    });
-
-    stepBtn.addEventListener('click', () => {
-      if (!running) {
-        lifeStep();
-      }
-    });
-
-    randomBtn.addEventListener('click', () => {
-      stop();
-      randomFill();
-    });
-
-    clearBtn.addEventListener('click', () => {
-      stop();
-      clearGrid();
-    });
-
-    speedSlider.addEventListener('input', () => {
-      speed = parseInt(speedSlider.value, 10);
-    });
-
-    cellSizeSlider.addEventListener('input', () => {
-      cellSize = parseInt(cellSizeSlider.value, 10);
-      resizeGrid(true);
-    });
-
-    toolbarToggle.addEventListener('click', () => {
-      toolbarHidden = !toolbarHidden;
-      toolbar.style.display = toolbarHidden ? 'none' : 'flex';
-      resizeGrid(true);
-    });
-
-    fakeFullscreen.addEventListener('click', () => {
-      toolbarHidden = !toolbarHidden;
-      toolbar.style.display = toolbarHidden ? 'none' : 'flex';
-      if (bestiaryPanel.classList.contains('visible')) {
-        bestiaryPanel.classList.remove('visible');
-        patternButtons.forEach(btn => btn.classList.remove('active'));
-      }
-      resizeGrid(true);
-    });
-
-    bestiaryToggle.addEventListener('click', () => {
-      bestiaryPanel.classList.toggle('visible');
-    });
-
-    bestiaryClose.addEventListener('click', () => {
-      bestiaryPanel.classList.remove('visible');
-      patternButtons.forEach(btn => btn.classList.remove('active'));
-    });
-
-    patternButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const name = btn.dataset.pattern;
-        patternButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentStamp = name;
-        setTool('stamp');
-      });
-    });
-
-    window.addEventListener('resize', () => {
-      resizeGrid(true);
-    });
-
-    function init() {
-      resizeGrid(false);
-      clearGrid();
-    }
-
-    init();
-  </script>
+  window.addEventListener('resize', resize);
+  boot();
+})();
+</script>
 </body>
 </html>
